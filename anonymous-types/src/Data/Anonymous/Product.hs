@@ -1,35 +1,45 @@
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE IncoherentInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-#include "overlap.h"
+#include "kinds.h"
 #include "incoherent.h"
+#include "overlap.h"
+
+#ifdef DataPolyKinds
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PolyKinds #-}
+#endif
+
+#ifdef SafeHaskell
+{-# LANGUAGE Trustworthy #-}
+#endif
+
 
 module Data.Anonymous.Product
     ( Product (Cons, Nil)
-    , Field
-#if __GLASGOW_HASKELL__ >= 710
-    , pattern Field
-#endif
-    , field
+    , Record
+    , Tuple
     )
 where
+
+-- anonymous-types -----------------------------------------------------------
+import           Data.Field (Field)
+import           Data.Uncurry (Uncurry)
+
 
 -- base ----------------------------------------------------------------------
 import           Control.Applicative (Const (Const))
@@ -37,15 +47,18 @@ import           Control.Monad (msum)
 import           Data.Functor.Identity (Identity (Identity))
 import           Data.Ix (Ix, inRange, range)
 import qualified Data.Ix as I (index)
-#if __GLASGOW_HASKELL__ < 710
+#if !MIN_VERSION_base(4, 8, 0)
 import           Data.Monoid (Monoid, mappend, mempty)
 #endif
-#if __GLASGOW_HASKELL__ >= 800
+#if MIN_VERSION_base(4, 9, 0)
 import           Data.Semigroup (Semigroup, (<>))
 #endif
+#ifdef PolyTypeable
 import           Data.Typeable (Typeable)
+#endif
 import           Foreign.Ptr (castPtr, plusPtr)
 import           Foreign.Storable (Storable, alignment, peek, poke, sizeOf)
+#if MIN_VERSION_base(4, 4, 0)
 import           GHC.Generics
                      ( (:*:) ((:*:))
                      , D1
@@ -57,7 +70,7 @@ import           GHC.Generics
                      , U1 (U1)
                      , Rec0
                      , Rep
-#if __GLASGOW_HASKELL__ >= 800
+#if MIN_VERSION_base(4, 9, 0)
                      , FixityI (PrefixI)
                      , Meta (MetaCons, MetaData, MetaSel)
                      , SourceUnpackedness (NoSourceUnpackedness)
@@ -74,38 +87,39 @@ import           GHC.Generics
                      , from
                      , to
                      )
-import           GHC.TypeLits (KnownSymbol)
+#endif
 
 
 -- types ---------------------------------------------------------------------
-import qualified Data.Field as F (Field (Field))
-import           Data.Uncurry (Uncurry (Uncurry))
+import           Type.List (Cons, Nil)
 
 
 ------------------------------------------------------------------------------
-data Product (f :: u -> *) (as :: [u]) where
-    Nil :: Product f '[]
-    Cons :: f a -> Product f as -> Product f (a ': as)
+data Product (f :: KPoly1 -> *) (as :: KList (KPoly1)) where
+    Nil :: Product f Nil
+    Cons :: f a -> Product f as -> Product f (Cons a as)
+#if defined(PolyTypeable)
   deriving (Typeable)
+#endif
 
 
 ------------------------------------------------------------------------------
-instance Eq (Product g '[]) where
+instance Eq (Product g Nil) where
     Nil == Nil = True
 
 
 ------------------------------------------------------------------------------
-instance (Eq (g a), Eq (Product g as)) => Eq (Product g (a ': as)) where
+instance (Eq (g a), Eq (Product g as)) => Eq (Product g (Cons a as)) where
     Cons a as == Cons b bs = a == b && as == bs
 
 
 ------------------------------------------------------------------------------
-instance Ord (Product g '[]) where
+instance Ord (Product g Nil) where
     compare Nil Nil = EQ
 
 
 ------------------------------------------------------------------------------
-instance (Ord (g a), Ord (Product g as)) => Ord (Product g (a ': as)) where
+instance (Ord (g a), Ord (Product g as)) => Ord (Product g (Cons a as)) where
     compare (Cons a as) (Cons b bs) = mappend (compare a b) (compare as bs)
 
 
@@ -115,8 +129,7 @@ instance __OVERLAPPABLE__ PlainRead g as => Read (Product g as) where
 
 
 ------------------------------------------------------------------------------
-instance (ReadHelper Identity as, PlainRead Identity as) =>
-    Read (Product Identity as)
+instance (ReadHelper Identity as, PlainRead Identity as) => Read (Tuple as)
   where
     readsPrec _ s = msum
         [ do
@@ -143,7 +156,8 @@ instance (ReadHelper (Const b) as, PlainRead (Const b) as) =>
 
 
 ------------------------------------------------------------------------------
-instance (ReadHelper Field as, PlainRead Field as) => Read (Product Field as)
+instance (ReadHelper (Uncurry Field) as, PlainRead (Uncurry Field) as) =>
+    Read (Record as)
   where
     readsPrec _ s = msum
         [ do
@@ -161,14 +175,14 @@ class PlainRead g as where
 
 
 ------------------------------------------------------------------------------
-instance PlainRead g '[] where
+instance PlainRead g Nil where
     plainReads s = do
         ("<>", s') <- lex s
         return (Nil, s')
 
 
 ------------------------------------------------------------------------------
-instance PlainReadHelper g (a ': as) => PlainRead g (a ': as) where
+instance PlainReadHelper g (Cons a as) => PlainRead g (Cons a as) where
     plainReads s = do
         ("<", s') <- lex s
         (as, s'') <- plainReadsHelper s'
@@ -182,12 +196,12 @@ class PlainReadHelper g as where
 
 
 ------------------------------------------------------------------------------
-instance PlainReadHelper g '[] where
+instance PlainReadHelper g Nil where
     plainReadsHelper s = return (Nil, s)
 
 
 ------------------------------------------------------------------------------
-instance Read (g a) => PlainReadHelper g (a ': '[]) where
+instance Read (g a) => PlainReadHelper g (Cons a Nil) where
     plainReadsHelper s = do
         (a, s') <- reads s
         return (Cons a Nil, s')
@@ -195,7 +209,7 @@ instance Read (g a) => PlainReadHelper g (a ': '[]) where
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPABLE__ (Read (g a), PlainReadHelper g as) =>
-    PlainReadHelper g (a ': as)
+    PlainReadHelper g (Cons a as)
   where
     plainReadsHelper s = do
         (a, s') <- reads s
@@ -215,7 +229,7 @@ instance __OVERLAPPABLE__ PlainReadHelper g as => ReadHelper g as where
 
 
 ------------------------------------------------------------------------------
-instance Read a => ReadHelper Identity (a ': '[]) where
+instance Read a => ReadHelper Identity (Cons a Nil) where
     readsHelper s = do
         (a, s') <- reads s
         return (Cons (Identity a) Nil, s')
@@ -223,7 +237,7 @@ instance Read a => ReadHelper Identity (a ': '[]) where
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPABLE__ (Read a, ReadHelper Identity as) =>
-    ReadHelper Identity (a ': as)
+    ReadHelper Identity (Cons a as)
   where
     readsHelper s = do
         (a, s') <- reads s
@@ -233,7 +247,7 @@ instance __OVERLAPPABLE__ (Read a, ReadHelper Identity as) =>
 
 
 ------------------------------------------------------------------------------
-instance Read b => ReadHelper (Const b) (a ': '[]) where
+instance Read b => ReadHelper (Const b) (Cons a Nil) where
     readsHelper s = do
         (b, s') <- reads s
         return (Cons (Const b) Nil, s')
@@ -241,7 +255,7 @@ instance Read b => ReadHelper (Const b) (a ': '[]) where
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPABLE__ (Read b, ReadHelper (Const b) as) =>
-    ReadHelper (Const b) (a ': as)
+    ReadHelper (Const b) (Cons a as)
   where
     readsHelper s = do
         (b, s') <- reads s
@@ -260,7 +274,7 @@ instance __INCOHERENT__ ShowHelper g as => Show (Product g as) where
 
 
 ------------------------------------------------------------------------------
-instance ShowHelper Identity as => Show (Product Identity as) where
+instance ShowHelper Identity as => Show (Tuple as) where
     showsPrec _ as = foldr (.) id $
         [ showString "("
         , showsHelper as
@@ -278,7 +292,7 @@ instance ShowHelper (Const b) as => Show (Product (Const b) as) where
 
 
 ------------------------------------------------------------------------------
-instance ShowHelper Field as => Show (Product Field as) where
+instance ShowHelper (Uncurry Field) as => Show (Record as) where
     showsPrec _ as = foldr (.) id $
         [ showString "{"
         , showsHelper as
@@ -292,7 +306,7 @@ class ShowHelper g as where
 
 
 ------------------------------------------------------------------------------
-instance ShowHelper g '[] where
+instance ShowHelper g Nil where
     showsHelper Nil = id
 
 
@@ -300,7 +314,7 @@ instance ShowHelper g '[] where
 instance __OVERLAPPABLE__
     (Show (g a), ShowHelper g as)
   =>
-    ShowHelper g (a ': as)
+    ShowHelper g (Cons a as)
   where
     showsHelper (Cons a Nil) = shows a
     showsHelper (Cons a as) = foldr (.) id $
@@ -311,7 +325,7 @@ instance __OVERLAPPABLE__
 
 
 ------------------------------------------------------------------------------
-instance (Show a, ShowHelper Identity as) => ShowHelper Identity (a ': as)
+instance (Show a, ShowHelper Identity as) => ShowHelper Identity (Cons a as)
   where
     showsHelper (Cons (Identity a) Nil) = shows a
     showsHelper (Cons (Identity a) as) = foldr (.) id $
@@ -322,7 +336,7 @@ instance (Show a, ShowHelper Identity as) => ShowHelper Identity (a ': as)
 
 
 ------------------------------------------------------------------------------
-instance (Show b, ShowHelper (Const b) as) => ShowHelper (Const b) (a ': as)
+instance (Show b, ShowHelper (Const b) as) => ShowHelper (Const b) (Cons a as)
   where
     showsHelper (Cons (Const a) Nil) = shows a
     showsHelper (Cons (Const a) as) = foldr (.) id $
@@ -333,21 +347,21 @@ instance (Show b, ShowHelper (Const b) as) => ShowHelper (Const b) (a ': as)
 
 
 ------------------------------------------------------------------------------
-instance Bounded (Product g '[]) where
+instance Bounded (Product g Nil) where
     minBound = Nil
     maxBound = Nil
 
 
 ------------------------------------------------------------------------------
 instance (Bounded (g a), Bounded (Product g as)) =>
-    Bounded (Product g (a ': as))
+    Bounded (Product g (Cons a as))
   where
     minBound = Cons minBound minBound
     maxBound = Cons maxBound maxBound
 
 
 ------------------------------------------------------------------------------
-instance Enum (Product g '[]) where
+instance Enum (Product g Nil) where
     fromEnum _ = 0
     toEnum 0 = Nil
     toEnum _ = error "Enum{Data.Product}.toEnum: bad argument"
@@ -362,7 +376,7 @@ instance
     , Eq (Product g as)
     )
   =>
-    Enum (Product g (a ': as))
+    Enum (Product g (Cons a as))
   where
     succ (Cons a as)
         | as == maxBound = Cons (succ a) minBound
@@ -391,35 +405,36 @@ instance (Enum (Product g as), Ord (Product g as)) => Ix (Product g as) where
     inRange (a, b) i = i >= a && i <= b
 
 
-#if __GLASGOW_HASKELL__ >= 800
+#if MIN_VERSION_base(4, 9, 0)
 ------------------------------------------------------------------------------
-instance Semigroup (Product g '[]) where
+instance Semigroup (Product g Nil) where
     Nil <> Nil = Nil
 
 
 ------------------------------------------------------------------------------
 instance (Semigroup (g a), Semigroup (Product g as)) =>
-    Semigroup (Product g (a ': as))
+    Semigroup (Product g (Cons a as))
   where
     Cons a as <> Cons b bs = Cons (a <> b) (as <> bs)
 
 
 #endif
 ------------------------------------------------------------------------------
-instance Monoid (Product g '[]) where
+instance Monoid (Product g Nil) where
     mempty = Nil
     mappend Nil Nil = Nil
 
 
 ------------------------------------------------------------------------------
-instance (Monoid (g a), Monoid (Product g as)) => Monoid (Product g (a ': as))
+instance (Monoid (g a), Monoid (Product g as)) =>
+    Monoid (Product g (Cons a as))
   where
     mempty = Cons mempty mempty
     mappend (Cons a as) (Cons b bs) = Cons (mappend a b) (mappend as bs)
 
 
 ------------------------------------------------------------------------------
-instance Storable (Product g '[]) where
+instance Storable (Product g Nil) where
     sizeOf _ = 0
     alignment _ = 1
     peek _ = return Nil
@@ -428,7 +443,7 @@ instance Storable (Product g '[]) where
 
 ------------------------------------------------------------------------------
 instance (Storable (g a), Storable (Product g as)) =>
-    Storable (Product g (a ': as))
+    Storable (Product g (Cons a as))
   where
     sizeOf _ = roundUpToNearestMultipleOf
         (sizeOf (undefined :: g a))
@@ -455,8 +470,9 @@ roundUpToNearestMultipleOf :: Integral a => a -> a -> a
 roundUpToNearestMultipleOf n m = n + m - mod n m
 
 
+#if MIN_VERSION_base(4, 4, 0)
 ------------------------------------------------------------------------------
-#if __GLASGOW_HASKELL__ >= 800
+#if MIN_VERSION_base(4, 9, 0)
 type ProductMetaData
     = 'MetaData "Product" "Data.Anonymous.Product.Product" "anonymous-types"
         'False
@@ -492,16 +508,16 @@ instance Constructor ProductMetaConsCons where
 
 #endif
 ------------------------------------------------------------------------------
-instance Generic (Product g '[]) where
-    type Rep (Product g '[]) = D1 ProductMetaData (C1 ProductMetaConsNil U1)
+instance Generic (Product g Nil) where
+    type Rep (Product g Nil) = D1 ProductMetaData (C1 ProductMetaConsNil U1)
     from Nil = M1 (M1 U1)
     to (M1 (M1 U1)) = Nil
 
 
 ------------------------------------------------------------------------------
-instance Generic (Product g (a ': as)) where
-    type Rep (Product g (a ': as)) = D1 ProductMetaData (C1 ProductMetaConsCons
-        ((:*:)
+instance Generic (Product g (Cons a as)) where
+    type Rep (Product g (Cons a as)) = D1 ProductMetaData
+        (C1 ProductMetaConsCons ((:*:)
             (S1 ProductMetaSelCons0 (Rec0 (g a)))
             (S1 ProductMetaSelCons1 (Rec0 (Product g as)))))
 
@@ -509,17 +525,10 @@ instance Generic (Product g (a ': as)) where
     to (M1 (M1 ((:*:) (M1 (K1 a)) (M1 (K1 as))))) = Cons a as
 
 
-------------------------------------------------------------------------------
-type Field = Uncurry F.Field
-
-
-------------------------------------------------------------------------------
-#if __GLASGOW_HASKELL__ >= 710
-pattern Field :: KnownSymbol s => a -> Field '(s, a)
-pattern Field a = Uncurry (F.Field a)
-
-
 #endif
 ------------------------------------------------------------------------------
-field :: KnownSymbol s => proxy s -> a -> Field '(s, a)
-field _ a = Uncurry (F.Field a)
+type Record = Product (Uncurry Field)
+
+
+------------------------------------------------------------------------------
+type Tuple = Product Identity

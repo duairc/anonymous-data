@@ -1,6 +1,6 @@
-#if __GLASGOW_HASKELL__ < 710
 {-# LANGUAGE IncoherentInstances #-}
-#define __INCOHERENT__
-#else
+#ifdef OverlapPragma
 #define __INCOHERENT__ {-# INCOHERENT #-}
+#else
+#define __INCOHERENT__
 #endif
