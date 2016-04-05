@@ -29,8 +29,7 @@ library
 
   build-depends:
     anonymous-types >= 0.1 && < 0.2,
-    base >= 4.7 && < 5,
-    profunctors
+    base >= 4.7 && < 5
 
   if impl(ghc < 7.10)
     build-depends: transformers > 0.2 && < 0.6
