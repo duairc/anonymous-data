@@ -10,6 +10,8 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE Safe #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Data.Anonymous.Profunctor
     ( ProductAdaptor
     , pProduct
@@ -25,10 +27,9 @@ import           Data.Field (Field (Field))
 
 
 -- base ----------------------------------------------------------------------
-import           Control.Applicative (Const (Const))
+--import           Control.Applicative (Const (Const))
 import           Data.Functor.Identity (Identity (Identity))
-import           Data.Proxy (Proxy (Proxy))
-import           GHC.TypeLits (KnownSymbol, symbolVal)
+import           GHC.TypeLits (KnownSymbol)
 
 
 -- product-profunctors -------------------------------------------------------
