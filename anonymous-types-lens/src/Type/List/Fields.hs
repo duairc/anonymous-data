@@ -45,6 +45,7 @@ type family FindIndex (n :: v) (as :: [v]) :: Nat where
 
 ------------------------------------------------------------------------------
 type family UpdateIndex (n :: Nat) (as :: [v]) (b :: v) :: [v] where
+    UpdateIndex n '[] b = '[]
     UpdateIndex 0 (a ': as) b = b ': as
     UpdateIndex n (a ': as) b = a ': (UpdateIndex (n - 1) as b)
 
@@ -72,19 +73,20 @@ type family UpdateIndices (ns :: [Nat]) (as :: [k]) (bs :: [k]) :: [k] where
 
 ------------------------------------------------------------------------------
 type family LookupKey (n :: k) (as :: [(k, v)]) :: v where
-    LookupKey k (p k v ': as) = v
+    LookupKey k ('(k, v) ': as) = v
     LookupKey k (a ': as) = LookupKey k as
 
 
 ------------------------------------------------------------------------------
 type family FindKey (n :: v) (as :: [(k, v)]) :: k where
-    FindKey v (p k v ': as) = k
+    FindKey v ('(k, v) ': as) = k
     FindKey v (a ': as) = FindKey v as
 
 
 ------------------------------------------------------------------------------
 type family UpdateKey (n :: k) (as :: [(k, v)]) (b :: v) :: [(k, v)] where
-    UpdateKey k (p k v ': as) v' = p k v' ': as
+    UpdateKey k '[] v' = '[]
+    UpdateKey k ('(k, v) ': as) v' = '(k, v') ': as
     UpdateKey k (a ': as) v' = a ': UpdateKey k as v'
 
 
@@ -101,8 +103,10 @@ type family FindKeys (ns :: [v]) (as :: [(k, v)]) :: [k] where
 
 
 ------------------------------------------------------------------------------
-type family UpdateKeys (as :: [(k, v)]) (bs :: [(k, v)]) :: [(k, v)]
+type family UpdateKeys (ns :: [k]) (as :: [(k, v)]) (bs :: [(k, v)])
+    :: [(k, v)]
   where
-    UpdateKeys '[] bs = '[]
-    UpdateKeys as '[] = as
-    UpdateKeys as ('(n, b) ': bs) = UpdateKeys (UpdateKey n as b) bs
+    UpdateKeys '[] as bs = as
+    UpdateKeys ns as '[] = as
+    UpdateKeys (n ': ns) as bs =
+        UpdateKeys ns (UpdateKey n as (LookupKey n bs)) bs

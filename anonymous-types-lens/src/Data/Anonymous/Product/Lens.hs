@@ -13,22 +13,32 @@
 #include "overlap.h"
 
 module Data.Anonymous.Product.Lens
-    ( Index (index')
+    ( Index
+    , index'
     , index
-    , Element (element')
+    , Element
+    , element'
     , element
-    , Key (key')
+    , Key
+    , key'
     , key
-    , Value (value')
+    , Value
+    , value'
     , value
-    , Indices (indices')
+    , Indices
+    , indices'
     , indices
-    , Elements (elements')
+    , Elements
+    , elements'
     , elements
-    , Keys (keys')
+    , Keys
+    , keys'
     , keys
-    , Values (values')
+    , Values
+    , values'
     , values
+    , MapFst
+    , MapSnd
     )
 where
 
@@ -118,60 +128,30 @@ index = index' (Proxy :: Proxy n)
 
 
 ------------------------------------------------------------------------------
-class (n ~ FindIndex a as, bs ~ UpdateIndex n as b) => Element n as bs a b
-    | n as -> a
-    , n bs -> b
-    , n as b -> bs
-    , n bs a -> as
-  where
-    element' :: Functor f
-        => proxy a
-        -> (g a -> f (g b))
-        -> Product g as
-        -> f (Product g bs)
+class Index (FindIndex e as) as bs a b => Element e as bs a b
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPING__ Element 0 (a ': as) (a ': as) a a where
-    element' _ f (Cons a as) = fmap (\a' -> Cons a' as) (f a)
+instance Index (FindIndex e as) as bs a b => Element e as bs a b
 
 
 ------------------------------------------------------------------------------
-instance Element 0 (a ': as) (b ': as) a b where
-    element' _ f (Cons a as) = fmap (\a' -> Cons a' as) (f a)
-
-
-------------------------------------------------------------------------------
-instance __OVERLAPS__
-    ( Element (n - 1) as as a a
-    , FindIndex a (c ': as) ~ n
-    , UpdateIndex n (c ': as) a ~ (c ': as)
-    )
-  =>
-    Element n (c ': as) (c ': as) a a
-  where
-    element' e f (Cons a as) = Cons a <$> element' e f as
-
-
-------------------------------------------------------------------------------
-instance __OVERLAPPABLE__
-    ( Element (n - 1) as bs a b
-    , FindIndex a (c ': as) ~ n
-    , UpdateIndex n (c ': as) b ~ (c ': bs)
-    )
-  =>
-    Element n (c ': as) (c ': bs) a b
-  where
-    element' e f (Cons a as) = Cons a <$> element' e f as
+element'
+    :: forall e as bs a b g f proxy. (Element e as bs a b, Functor f)
+    => proxy e
+    -> (g a -> f (g b))
+    -> Product g as
+    -> f (Product g bs)
+element' _ = index' (Proxy :: Proxy (FindIndex e as))
 
 
 ------------------------------------------------------------------------------
 element
-    :: forall a n as bs b g f. (Element n as bs a b, Functor f)
+    :: forall e as bs a b g f. (Element e as bs a b, Functor f)
     => (g a -> f (g b))
     -> Product g as
     -> f (Product g bs)
-element = element' (Proxy :: Proxy a)
+element = element' (Proxy :: Proxy e)
 
 
 ------------------------------------------------------------------------------
@@ -232,60 +212,30 @@ key = key' (Proxy :: Proxy n)
 
 
 ------------------------------------------------------------------------------
-class (n ~ FindKey a as, bs ~ UpdateKey n as b) => Value n as bs a b
-    | n as -> a
-    , n bs -> b
-    , n as b -> bs
-    , n bs a -> as
-  where
-    value' :: Functor f
-        => proxy a
-        -> (g '(n, a) -> f (g '(n, b)))
-        -> Product g as
-        -> f (Product g bs)
+class Key (FindKey v as) as bs a b => Value v as bs a b
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPING__ Value n ('(n, a) ': as) ('(n, a) ': as) a a where
-    value' _ f (Cons a as) = fmap (\a' -> Cons a' as) (f a)
+instance Key (FindKey v as) as bs a b => Value v as bs a b
 
 
 ------------------------------------------------------------------------------
-instance Value n ('(n, a) ': as) ('(n, b) ': as) a b where
-    value' _ f (Cons a as) = fmap (\a' -> Cons a' as) (f a)
-
-
-------------------------------------------------------------------------------
-instance __OVERLAPS__
-    ( Value n as as a a
-    , FindKey a (c ': as) ~ n
-    , UpdateKey n (c ': as) a ~ (c ': as)
-    )
-  =>
-    Value n (c ': as) (c ': as) a a
-  where
-    value' p f (Cons a as) = Cons a <$> value' p f as
-
-
-------------------------------------------------------------------------------
-instance __OVERLAPPABLE__
-    ( Value n as bs a b
-    , FindKey a (c ': as) ~ n
-    , UpdateKey n (c ': as) b ~ (c ': bs)
-    )
-  =>
-    Value n (c ': as) (c ': bs) a b
-  where
-    value' p f (Cons a as) = Cons a <$> value' p f as
+value'
+    :: forall v as bs a b g f proxy. (Value v as bs a b, Functor f)
+    => proxy v
+    -> (g '((FindKey v as), a) -> f (g '((FindKey v as), b)))
+    -> Product g as
+    -> f (Product g bs)
+value' _ = key' (Proxy :: Proxy (FindKey v as))
 
 
 ------------------------------------------------------------------------------
 value
-    :: forall a n as bs b g f. (Value n as bs a b, Functor f)
-    => (g '(n, a) -> f (g '(n, b)))
+    :: forall v as bs a b g f. (Value v as bs a b, Functor f)
+    => (g '((FindKey v as), a) -> f (g '((FindKey v as), b)))
     -> Product g as
     -> f (Product g bs)
-value = value' (Proxy :: Proxy a)
+value = value' (Proxy :: Proxy v)
 
 
 ------------------------------------------------------------------------------
@@ -306,27 +256,6 @@ class (as ~ LookupIndices ns ss, ts ~ UpdateIndices ns ss bs) =>
 ------------------------------------------------------------------------------
 instance Indices '[] ss ss '[] '[] where
     indices' _ f s = const s <$> f Nil
-
-
-------------------------------------------------------------------------------
-instance __OVERLAPPING__
-    ( Index n ss ss a a
-    , UpdateIndex n ss a ~ ss
-    , Indices ns ss ss as as
-    , UpdateIndices ns ss as ~ ss
-    )
-  =>
-    Indices (n ': ns) ss ss (a ': as) (a ': as)
-  where
-    indices' _ = lens get set'
-      where
-        get :: Product g ss -> Product g (a ': as)
-        get ss = Cons
-            (view (index' (Proxy :: Proxy n)) ss)
-            (view (indices' (Proxy :: Proxy ns)) ss)
-        set' :: Product g (a ': as) -> Product g ss -> Product g ss
-        set' (Cons a as) = set (indices' (Proxy :: Proxy ns)) as
-            . set (index' (Proxy :: Proxy n)) a
 
 
 ------------------------------------------------------------------------------
@@ -375,127 +304,54 @@ indices = indices' (Proxy :: Proxy ns)
 
 
 ------------------------------------------------------------------------------
-class (ns ~ FindIndices as ss, ts ~ UpdateIndices ns ss bs) =>
-    Elements ns ss ts as bs
-        | ns ss -> as
-        , ns ts -> bs
-        , ns ss bs -> ts
-        , ns ts as -> ss
-  where
-    elements' :: Functor f
-        => proxy as
-        -> (Product g as -> f (Product g bs))
-        -> Product g ss
-        -> f (Product g ts)
+class Indices (FindIndices es ss) ss ts as bs => Elements es ss ts as bs
 
 
 ------------------------------------------------------------------------------
-instance Elements '[] ss ss '[] '[] where
-    elements' _ f s = const s <$> f Nil
+instance Indices (FindIndices es ss) ss ts as bs => Elements es ss ts as bs
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPING__
-    ( Element n ss ss a a
-    , UpdateIndex n ss a ~ ss
-    , Elements ns ss ss as as
-    , UpdateIndices ns ss as ~ ss
-    )
-  =>
-    Elements (n ': ns) ss ss (a ': as) (a ': as)
-  where
-    elements' _ = lens get set'
-      where
-        get :: Product g ss -> Product g (a ': as)
-        get ss = Cons (view (element' Proxy) ss) (view (elements' Proxy) ss)
-        set' :: Product g (a ': as) -> Product g ss -> Product g ss
-        set' (Cons a as) = set (elements' (Proxy :: Proxy as)) as
-            . set (element' (Proxy :: Proxy a)) a
+elements'
+    :: forall es ss ts as bs g f proxy. (Elements es ss ts as bs, Functor f)
+    => proxy es
+    -> (Product g as -> f (Product g bs))
+    -> Product g ss
+    -> f (Product g ts)
+elements' _ = indices' (Proxy :: Proxy (FindIndices es ss))
 
 
 ------------------------------------------------------------------------------
-instance
-    ( Element n ss ss a a
-    , Element n ss ss' a b
-    , Element n ss' ss b a
-    , Element n ss' ss' b b
-    , UpdateIndex n ss a ~ ss
-    , UpdateIndex n ss b ~ ss'
-    , UpdateIndex n ss' a ~ ss
-    , UpdateIndex n ss' b ~ ss'
-    , Elements ns ss ss as as
-    , Elements ns ss ss' as as
-    , Elements ns ss' ss as as
-    , Elements ns ss' ss' as as
-    , Elements ns ss' ts as bs
-    , Elements ns ts ss' bs as
-    , Elements ns ts ts bs bs
-    , UpdateIndices ns ss as ~ ss
-    , UpdateIndices ns ss' as ~ ss'
-    , UpdateIndices ns ss' bs ~ ts
-    , UpdateIndices ns ts as ~ ss'
-    , UpdateIndices ns ts bs ~ ts
-    )
-  =>
-    Elements (n ': ns) ss ts (a ': as) (b ': bs)
-  where
-    elements' _ = lens get set'
-      where
-        get :: Product g ss -> Product g (a ': as)
-        get ss = Cons (view (element' Proxy) ss) (view (elements' Proxy) ss)
-        set' :: Product g (b ': bs) -> Product g ss -> Product g ts
-        set' (Cons b bs) = set (elements' (Proxy :: Proxy as)) bs
-            . set (element' (Proxy :: Proxy a)) b
-
-
-------------------------------------------------------------------------------
-elements :: forall as ns ss ts bs g f. (Elements ns ss ts as bs, Functor f)
+elements
+    :: forall es ss ts as bs g f.
+        ( Elements es ss ts as bs
+        , Functor f
+        )
     => (Product g as -> f (Product g bs))
     -> Product g ss
     -> f (Product g ts)
-elements = elements' (Proxy :: Proxy as)
+elements = elements' (Proxy :: Proxy es)
 
 
 ------------------------------------------------------------------------------
-class (LookupKeys (MapFst as) ss ~ MapSnd as, UpdateKeys ss bs ~ ts) =>
-    Keys ss ts as bs
-        | ss bs -> ts
+class (LookupKeys ns ss ~ MapSnd as, ns ~ MapFst as, UpdateKeys ns ss bs ~ ts)
+  =>
+    Keys ns ss ts as bs
+        | ns ss -> as
+        , ns ts -> bs
+        , ss bs -> ts
         , ts as -> ss
-        , ss ts as -> bs
-        , ss ts bs -> as
   where
     keys' :: Functor f
-        => proxy (MapFst as)
+        => proxy ns
         -> (Product g as -> f (Product g bs))
         -> Product g ss
         -> f (Product g ts)
 
 
 ------------------------------------------------------------------------------
-instance Keys ss ss '[] '[] where
+instance Keys '[] ss ss '[] '[] where
     keys' _ f s = const s <$> f Nil
-
-
-------------------------------------------------------------------------------
-instance __OVERLAPPING__
-    ( Key n ss ss a a
-    , UpdateKey n ss a ~ ss
-    , Keys ss ss as as
-    , UpdateKeys ss as ~ ss
-    , UpdateKeys ss ('(n, a) ': as) ~ ss
-    )
-  =>
-    Keys ss ss ('(n, a) ': as) ('(n, a) ': as)
-  where
-    keys' _ = lens get set'
-      where
-        get :: Product g ss -> Product g ('(n, a) ': as)
-        get ss = Cons
-            (view (key' (Proxy :: Proxy n)) ss)
-            (view (keys' (Proxy :: Proxy (MapFst as))) ss)
-        set' :: Product g ('(n, a) ': as) -> Product g ss -> Product g ss
-        set' (Cons a as) = set (keys' (Proxy :: Proxy (MapFst as))) as
-            . set (key' (Proxy :: Proxy n)) a
 
 
 ------------------------------------------------------------------------------
@@ -508,152 +364,98 @@ instance
     , UpdateKey n ss b ~ ss'
     , UpdateKey n ss' a ~ ss
     , UpdateKey n ss' b ~ ss'
-    , Keys ss ss as as
-    , Keys ss ss' as as
-    , Keys ss' ss as as
-    , Keys ss' ss' as as
-    , Keys ss' ts as bs
-    , Keys ts ss' bs as
-    , Keys ts ts bs bs
-    , UpdateKeys ss as ~ ss
-    , UpdateKeys ss' as ~ ss'
-    , UpdateKeys ss' bs ~ ts
-    , UpdateKeys ts as ~ ss'
-    , UpdateKeys ts bs ~ ts
-    , UpdateKeys ss ('(n, b) ': bs) ~ ts
+    , Keys ns ss ss as as
+    , Keys ns ss ss' as as
+    , Keys ns ss' ss as as
+    , Keys ns ss' ss' as as
+    , Keys ns ss' ts as bs
+    , Keys ns ts ss' bs as
+    , Keys ns ts ts bs bs
+    , UpdateKeys ns ss as ~ ss
+    , UpdateKeys ns ss' as ~ ss'
+    , UpdateKeys ns ss' bs ~ ts
+    , UpdateKeys ns ts as ~ ss'
+    , UpdateKeys ns ts bs ~ ts
+    , UpdateKeys (n ': ns) ss ('(n, b) ': bs) ~ ts
     )
   =>
-    Keys ss ts ('(n, a) ': as) ('(n, b) ': bs)
+    Keys (n ': ns) ss ts ('(n, a) ': as) ('(n, b) ': bs)
   where
     keys' _ = lens get set'
       where
         get :: Product g ss -> Product g ('(n, a) ': as)
         get ss = Cons
             (view (key' (Proxy :: Proxy n)) ss)
-            (view (keys' (Proxy :: Proxy (MapFst as))) ss)
+            (view (keys' (Proxy :: Proxy ns)) ss)
         set' :: Product g ('(n, b) ': bs) -> Product g ss -> Product g ts
-        set' (Cons b bs) = set (keys' (Proxy :: Proxy (MapFst as))) bs
+        set' (Cons b bs) = set (keys' (Proxy :: Proxy ns)) bs
             . set (key' (Proxy :: Proxy n)) b
 
 
 ------------------------------------------------------------------------------
 keys
-    :: forall ns ss ts as bs f g.
-        ( Keys ss ts as bs
-        , Functor f
-        , ns ~ MapFst as
-        )
-    =>  (Product g as -> f (Product g bs))
+    :: forall ns ss ts as bs f g. (Keys ns ss ts as bs, Functor f)
+    => (Product g as -> f (Product g bs))
     -> Product g ss
     -> f (Product g ts)
 keys = keys' (Proxy :: Proxy ns)
 
 
 ------------------------------------------------------------------------------
-class (FindKeys (MapSnd as) ss ~ MapFst as, UpdateKeys ss bs ~ ts) =>
-    Values ss ts as bs
-        | ss bs -> ts
-        , ts as -> ss
-        , ss ts as -> bs
-        , ss ts bs -> as
-  where
-    values' :: Functor f
-        => proxy (MapSnd as)
-        -> (Product g as -> f (Product g bs))
-        -> Product g ss
-        -> f (Product g ts)
+class Keys (FindKeys vs ss) ss ts as bs => Values vs ss ts as bs
 
 
 ------------------------------------------------------------------------------
-instance Values ss ss '[] '[] where
-    values' _ f s = const s <$> f Nil
+instance Keys (FindKeys vs ss) ss ts as bs => Values vs ss ts as bs
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPING__
-    ( Value n ss ss a a
-    , UpdateKey n ss a ~ ss
-    , Values ss ss as as
-    , UpdateKeys ss as ~ ss
-    , UpdateKeys ss ('(n, a) ': as) ~ ss
-    )
-  =>
-    Values ss ss ('(n, a) ': as) ('(n, a) ': as)
-  where
-    values' _ = lens get set'
-      where
-        get :: Product g ss -> Product g ('(n, a) ': as)
-        get ss = Cons
-            (view (value' (Proxy :: Proxy a)) ss)
-            (view (values' (Proxy :: Proxy (MapSnd as))) ss)
-        set' :: Product g ('(n, a) ': as) -> Product g ss -> Product g ss
-        set' (Cons a as) = set (values' (Proxy :: Proxy (MapSnd as))) as
-            . set (value' (Proxy :: Proxy a)) a
-
-
-------------------------------------------------------------------------------
-instance
-    ( Value n ss ss a a
-    , Value n ss ss' a b
-    , Value n ss' ss b a
-    , Value n ss' ss' b b
-    , UpdateKey n ss a ~ ss
-    , UpdateKey n ss b ~ ss'
-    , UpdateKey n ss' a ~ ss
-    , UpdateKey n ss' b ~ ss'
-    , Values ss ss as as
-    , Values ss ss' as as
-    , Values ss' ss as as
-    , Values ss' ss' as as
-    , Values ss' ts as bs
-    , Values ts ss' bs as
-    , Values ts ts bs bs
-    , UpdateKeys ss as ~ ss
-    , UpdateKeys ss' as ~ ss'
-    , UpdateKeys ss' bs ~ ts
-    , UpdateKeys ts as ~ ss'
-    , UpdateKeys ts bs ~ ts
-    , UpdateKeys ss ('(n, b) ': bs) ~ ts
-    )
-  =>
-    Values ss ts ('(n, a) ': as) ('(n, b) ': bs)
-  where
-    values' _ = lens get set'
-      where
-        get :: Product g ss -> Product g ('(n, a) ': as)
-        get ss = Cons
-            (view (value' (Proxy :: Proxy a)) ss)
-            (view (values' (Proxy :: Proxy (MapSnd as))) ss)
-        set' :: Product g ('(n, b) ': bs) -> Product g ss -> Product g ts
-        set' (Cons b bs) = set (values' (Proxy :: Proxy (MapSnd as))) bs
-            . set (value' (Proxy :: Proxy a)) b
+values'
+    :: forall vs ss ts as bs g f proxy.
+        ( Values vs ss ts as bs
+        , Functor f
+        )
+    => proxy vs
+    -> (Product g as -> f (Product g bs))
+    -> Product g ss
+    -> f (Product g ts)
+values' _ = keys' (Proxy :: Proxy (FindKeys vs ss))
 
 
 ------------------------------------------------------------------------------
 values
-    :: forall ns ss ts as bs f g.
-        ( Values ss ts as bs
+    :: forall vs ss ts as bs g f.
+        ( Values vs ss ts as bs
         , Functor f
-        , ns ~ MapSnd as
         )
-    =>  (Product g as -> f (Product g bs))
+    => (Product g as -> f (Product g bs))
     -> Product g ss
     -> f (Product g ts)
-values = values' (Proxy :: Proxy ns)
+values = values' (Proxy :: Proxy vs)
 
 
 ------------------------------------------------------------------------------
 type family MapFst (as :: [(k, v)]) :: [k]
   where
     MapFst '[] = '[]
-    MapFst ('(k, v) ': as) = k ': MapFst as
+    MapFst (a ': as) = Fst a ': MapFst as
 
 
 ------------------------------------------------------------------------------
 type family MapSnd (as :: [(k, v)]) :: [v]
   where
     MapSnd '[] = '[]
-    MapSnd ('(k, v) ': as) = v ': MapSnd as
+    MapSnd (a ': as) = Snd a ': MapSnd as
+
+
+------------------------------------------------------------------------------
+type family Fst (p :: (a, b)) :: a where
+    Fst '(a, b) = a
+
+
+------------------------------------------------------------------------------
+type family Snd (p :: (a, b)) :: b where
+    Snd '(a, b) = b
 
 
 ------------------------------------------------------------------------------
