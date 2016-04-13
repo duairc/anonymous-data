@@ -29,6 +29,8 @@
 
 module Data.Uncurry
     ( Uncurry (Uncurry)
+    , umap
+    , umap2
     )
 where
 
@@ -345,7 +347,7 @@ umap2 f (Uncurry a) (Uncurry b) = Uncurry (f a b)
 ------------------------------------------------------------------------------
 #if __GLASGOW_HASKELL__ >= 800
 type UncurryMetaData
-    = 'MetaData "Uncurry" "Data.Uncurry" "types" 'False
+    = 'MetaData "Uncurry" "Data.Uncurry" "anonymous-types" 'False
 type UncurryMetaCons = 'MetaCons "Uncurry" 'PrefixI 'False
 type UncurryMetaSel
     = 'MetaSel 'Nothing 'NoSourceUnpackedness 'SourceStrict 'DecidedStrict
