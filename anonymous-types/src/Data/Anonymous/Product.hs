@@ -90,6 +90,10 @@ import           GHC.Generics
 #endif
 
 
+-- deepseq -------------------------------------------------------------------
+import           Control.DeepSeq (NFData, rnf)
+
+
 -- types ---------------------------------------------------------------------
 import           Type.List (Cons, Nil)
 
@@ -526,6 +530,18 @@ instance Generic (Product g (Cons a as)) where
 
 
 #endif
+------------------------------------------------------------------------------
+instance NFData (Product g Nil) where
+    rnf Nil = ()
+
+
+------------------------------------------------------------------------------
+instance (NFData (g a), NFData (Product g as)) =>
+    NFData (Product g (Cons a as))
+  where
+    rnf (Cons a as) = rnf a `seq` rnf as
+
+
 ------------------------------------------------------------------------------
 type Record = Product (Uncurry Field)
 

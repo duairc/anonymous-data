@@ -154,6 +154,10 @@ import           Prelude hiding (foldr)
 #endif
 
 
+-- deepseq -------------------------------------------------------------------
+import           Control.DeepSeq (NFData, rnf)
+
+
 -- types ---------------------------------------------------------------------
 import           GHC.TypeLits.Compat (KnownSymbol, symbolVal)
 import           Type.Meta (Proxy (Proxy))
@@ -483,6 +487,11 @@ instance KnownSymbol s => Generic1 (Field s) where
 
 
 #endif
+------------------------------------------------------------------------------
+instance NFData a => NFData (Field s a) where
+    rnf (Field a) = rnf a
+
+
 ------------------------------------------------------------------------------
 field :: KnownSymbol s => proxy s -> a -> Field s a
 field _ = Field

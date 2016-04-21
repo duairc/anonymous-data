@@ -121,6 +121,10 @@ import           GHC.Generics
 #endif
 
 
+-- deepseq -------------------------------------------------------------------
+import           Control.DeepSeq (NFData, rnf)
+
+
 -- types ---------------------------------------------------------------------
 import           Type.Tuple.Pair (Pair)
 
@@ -378,3 +382,6 @@ instance Generic (Uncurry f (Pair a b)) where
 
 
 #endif
+------------------------------------------------------------------------------
+instance NFData (f a b) => NFData (Uncurry f (Pair a b)) where
+    rnf (Uncurry a) = rnf a
