@@ -1,16 +1,23 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE Safe #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+
+#if __GLASGOW_HASKELL__ >= 702
+{-# LANGUAGE Safe #-}
+#endif
+
+#if __GLASGOW_HASKELL__ >= 706
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PolyKinds #-}
+#endif
 
 module Data.Anonymous.Profunctor
     ( ProductAdaptor
@@ -27,9 +34,7 @@ import           Data.Field (Field (Field))
 
 
 -- base ----------------------------------------------------------------------
---import           Control.Applicative (Const (Const))
 import           Data.Functor.Identity (Identity (Identity))
-import           GHC.TypeLits (KnownSymbol)
 
 
 -- product-profunctors -------------------------------------------------------
@@ -41,20 +46,23 @@ import           Data.Profunctor.Product.Default (Default (def))
 import           Data.Profunctor (Profunctor, dimap)
 
 
+-- types ---------------------------------------------------------------------
+import           GHC.TypeLits.Compat (KnownSymbol)
+import           Type.List (Cons, Nil)
+import           Type.Tuple.Pair (Pair)
+
+
 ------------------------------------------------------------------------------
-class ProductProfunctor p => ProductAdaptor p (g :: k -> *)
-        (abs :: [k])
-        (as :: [k])
-        (bs :: [k])
-            | g p as bs -> abs
-            , g abs -> as
-            , g abs -> bs
+class ProductProfunctor p => ProductAdaptor p g abs as bs
+    | g p as bs -> abs
+    , g abs -> as
+    , g abs -> bs
   where
     pProduct :: Product g abs -> p (Product g as) (Product g bs)
 
 
 ------------------------------------------------------------------------------
-instance ProductProfunctor p => ProductAdaptor p g '[] '[] '[] where
+instance ProductProfunctor p => ProductAdaptor p g Nil Nil Nil where
     pProduct Nil = dimap (\Nil -> ()) (\() -> Nil) empty
 
 
@@ -64,13 +72,30 @@ instance
     , ProductAdaptor p Identity abs as bs
     )
   =>
-    ProductAdaptor p Identity (p a b ': abs) (a ': as) (b ': bs)
+    ProductAdaptor p Identity (Cons (p a b) abs) (Cons a as) (Cons b bs)
   where
-    pProduct (Cons (Identity a) as) =
-        dimap
-            (\(Cons (Identity a_) as_) -> (a_, as_))
-            (\(a_, as_) -> Cons (Identity a_) as_)
-            (a ***! pProduct as)
+    pProduct (Cons (Identity a) as) = dimap
+        (\(Cons (Identity a_) as_) -> (a_, as_))
+        (\(a_, as_) -> Cons (Identity a_) as_)
+        (a ***! pProduct as)
+
+
+------------------------------------------------------------------------------
+instance
+    ( ProductProfunctor p
+    , ProductAdaptor p (Uncurry Field) abs as bs
+    , KnownSymbol s
+    )
+  =>
+    ProductAdaptor p (Uncurry Field)
+        (Cons (Pair s (p a b)) abs)
+        (Cons (Pair s a) as)
+        (Cons (Pair s b) bs)
+  where
+    pProduct (Cons (Uncurry (Field a)) as) = dimap
+        (\(Cons (Uncurry (Field a_)) as_) -> (a_, as_))
+        (\(a_, as_) -> Cons (Uncurry (Field a_)) as_)
+        (a ***! pProduct as)
 
 
 ------------------------------------------------------------------------------
@@ -87,43 +112,8 @@ pTuple
 pTuple = pProduct
 
 
-{-
 ------------------------------------------------------------------------------
-instance
-    ( ProductProfunctor p
-    , ProductAdaptor p (Const c) abs as bs
-    )
-  =>
-    ProductAdaptor p (Const c) (p a b ': abs) (a ': as) (b ': bs)
-  where
-    pProduct (Cons (Const a) as) = dimap
-            (\(Cons (Const a_) as_) -> (a_, as_))
-            (\(a_, as_) -> Cons (Const a_) as_)
-            (def ***! pProduct as)
--}
-
-
-------------------------------------------------------------------------------
-instance
-    ( ProductProfunctor p
-    , ProductAdaptor p (Uncurry Field) abs as bs
-    , KnownSymbol s
-    )
-  =>
-    ProductAdaptor p (Uncurry Field)
-        ('(s, p a b) ': abs)
-        ('(s, a) ': as)
-        ('(s, b) ': bs)
-  where
-    pProduct (Cons (Uncurry (Field a)) as) =
-        dimap
-            (\(Cons (Uncurry (Field a_)) as_) -> (a_, as_))
-            (\(a_, as_) -> Cons (Uncurry (Field a_)) as_)
-            (a ***! pProduct as)
-
-
-------------------------------------------------------------------------------
-instance ProductProfunctor p => Default p (Product f '[]) (Product g '[])
+instance ProductProfunctor p => Default p (Product f Nil) (Product g Nil)
   where
     def = dimap (\Nil -> ()) (\() -> Nil) empty
 
@@ -135,7 +125,7 @@ instance
     , Default p (Product f as) (Product g bs)
     )
   =>
-    Default p (Product f (a ': as)) (Product g (b ': bs))
+    Default p (Product f (Cons a as)) (Product g (Cons b bs))
   where
     def = dimap (\(Cons a as) -> (a, as)) (uncurry Cons)
         ((***!)
@@ -152,6 +142,6 @@ instance (Profunctor p, Default p a b, KnownSymbol s) =>
 
 ------------------------------------------------------------------------------
 instance (Profunctor p, Default p (f a b) (g c d)) =>
-    Default p (Uncurry f '(a, b)) (Uncurry g '(c, d))
+    Default p (Uncurry f (Pair a b)) (Uncurry g (Pair c d))
   where
     def = dimap (\(Uncurry f) -> f) Uncurry (def :: p (f a b) (g c d))

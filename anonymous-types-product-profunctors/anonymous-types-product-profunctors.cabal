@@ -23,7 +23,7 @@ library
     Data.Anonymous.Profunctor
 
   build-depends:
-    base >= 4.7 && < 5,
+    base >= 4.2 && < 5,
     anonymous-types >= 0.1 && < 0.2,
     product-profunctors >= 0.5 && < 0.8,
     profunctors >= 3.1.1 && < 6,
