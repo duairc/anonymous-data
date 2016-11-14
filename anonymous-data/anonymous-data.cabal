@@ -31,12 +31,16 @@ library
     Data.Field
     Data.Uncurry
 
+  other-modules:
+    Data.Classes
+    Data.Classes.Internal
+
   build-depends:
     base >= 4 && < 5,
     deepseq >= 1.1 && < 1.5,
     types >= 0.1 && < 0.2
 
-  if impl(ghc < 7.10)
+  if impl(ghc < 8)
     build-depends: transformers > 0.2 && < 0.6
 
   if impl(ghc >= 7.6)
@@ -47,6 +51,9 @@ library
 
   if impl(ghc >= 7.8)
     cpp-options: -DClosedTypeFamilies
+
+  if impl(ghc >= 7.8)
+    cpp-options: -DMinimalPragma
 
   if impl(ghc >= 7.2)
     cpp-options: -DSafeHaskell

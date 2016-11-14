@@ -38,6 +38,7 @@ where
 
 -- anonymous-data ------------------------------------------------------------
 import           Data.Field (Field)
+import qualified Data.Classes as I
 import           Data.Uncurry (Uncurry)
 
 
@@ -45,8 +46,15 @@ import           Data.Uncurry (Uncurry)
 import           Control.Applicative (Const (Const))
 import           Control.Monad (msum)
 import           Data.Functor.Identity (Identity (Identity))
-import           Data.Ix (Ix, inRange, range)
-import qualified Data.Ix as I (index)
+import           Data.Ix
+                     ( Ix
+                     , inRange
+                     , range
+#if __GLASGOW_HASKELL__ >= 700
+                     , rangeSize
+#endif
+                     )
+import qualified Data.Ix (index)
 #if !MIN_VERSION_base(4, 8, 0)
 import           Data.Monoid (Monoid, mappend, mempty)
 #endif
@@ -113,8 +121,8 @@ instance Eq (Product g Nil) where
 
 
 ------------------------------------------------------------------------------
-instance (Eq (g a), Eq (Product g as)) => Eq (Product g (Cons a as)) where
-    Cons a as == Cons b bs = a == b && as == bs
+instance (I.Eq (g a), Eq (Product g as)) => Eq (Product g (Cons a as)) where
+    Cons a as == Cons b bs = a I.== b && as == bs
 
 
 ------------------------------------------------------------------------------
@@ -123,8 +131,9 @@ instance Ord (Product g Nil) where
 
 
 ------------------------------------------------------------------------------
-instance (Ord (g a), Ord (Product g as)) => Ord (Product g (Cons a as)) where
-    compare (Cons a as) (Cons b bs) = mappend (compare a b) (compare as bs)
+instance (I.Ord (g a), Ord (Product g as)) => Ord (Product g (Cons a as))
+  where
+    compare (Cons a as) (Cons b bs) = mappend (I.compare a b) (compare as bs)
 
 
 ------------------------------------------------------------------------------
@@ -205,18 +214,18 @@ instance PlainReadHelper g Nil where
 
 
 ------------------------------------------------------------------------------
-instance Read (g a) => PlainReadHelper g (Cons a Nil) where
+instance I.Read (g a) => PlainReadHelper g (Cons a Nil) where
     plainReadsHelper s = do
-        (a, s') <- reads s
+        (a, s') <- I.readsPrec 0 s
         return (Cons a Nil, s')
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__ (Read (g a), PlainReadHelper g as) =>
+instance __OVERLAPPABLE__ (I.Read (g a), PlainReadHelper g as) =>
     PlainReadHelper g (Cons a as)
   where
     plainReadsHelper s = do
-        (a, s') <- reads s
+        (a, s') <- I.readsPrec 0 s
         (",", s'') <- lex s'
         (as, s''') <- plainReadsHelper s''
         return (Cons a as, s''')
@@ -233,36 +242,36 @@ instance __OVERLAPPABLE__ PlainReadHelper g as => ReadHelper g as where
 
 
 ------------------------------------------------------------------------------
-instance Read a => ReadHelper Identity (Cons a Nil) where
+instance I.Read a => ReadHelper Identity (Cons a Nil) where
     readsHelper s = do
-        (a, s') <- reads s
+        (a, s') <- I.readsPrec 0 s
         return (Cons (Identity a) Nil, s')
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__ (Read a, ReadHelper Identity as) =>
+instance __OVERLAPPABLE__ (I.Read a, ReadHelper Identity as) =>
     ReadHelper Identity (Cons a as)
   where
     readsHelper s = do
-        (a, s') <- reads s
+        (a, s') <- I.readsPrec 0 s
         (",", s'') <- lex s'
         (as, s''') <- readsHelper s''
         return (Cons (Identity a) as, s''')
 
 
 ------------------------------------------------------------------------------
-instance Read b => ReadHelper (Const b) (Cons a Nil) where
+instance I.Read b => ReadHelper (Const b) (Cons a Nil) where
     readsHelper s = do
-        (b, s') <- reads s
+        (b, s') <- I.readsPrec 0 s
         return (Cons (Const b) Nil, s')
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__ (Read b, ReadHelper (Const b) as) =>
+instance __OVERLAPPABLE__ (I.Read b, ReadHelper (Const b) as) =>
     ReadHelper (Const b) (Cons a as)
   where
     readsHelper s = do
-        (b, s') <- reads s
+        (b, s') <- I.readsPrec 0 s
         (",", s'') <- lex s'
         (as, s''') <- readsHelper s''
         return (Cons (Const b) as, s''')
@@ -316,35 +325,36 @@ instance ShowHelper g Nil where
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPABLE__
-    (Show (g a), ShowHelper g as)
+    (I.Show (g a), ShowHelper g as)
   =>
     ShowHelper g (Cons a as)
   where
-    showsHelper (Cons a Nil) = shows a
+    showsHelper (Cons a Nil) = I.showsPrec 0 a
     showsHelper (Cons a as) = foldr (.) id $
-        [ shows a
+        [ I.showsPrec 0 a
         , showString ", "
         , showsHelper as
         ]
 
 
 ------------------------------------------------------------------------------
-instance (Show a, ShowHelper Identity as) => ShowHelper Identity (Cons a as)
+instance (I.Show a, ShowHelper Identity as) => ShowHelper Identity (Cons a as)
   where
-    showsHelper (Cons (Identity a) Nil) = shows a
+    showsHelper (Cons (Identity a) Nil) = I.showsPrec 0 a
     showsHelper (Cons (Identity a) as) = foldr (.) id $
-        [ shows a
+        [ I.showsPrec 0 a
         , showString ", "
         , showsHelper as
         ]
 
 
 ------------------------------------------------------------------------------
-instance (Show b, ShowHelper (Const b) as) => ShowHelper (Const b) (Cons a as)
+instance (I.Show b, ShowHelper (Const b) as) =>
+    ShowHelper (Const b) (Cons a as)
   where
-    showsHelper (Cons (Const a) Nil) = shows a
+    showsHelper (Cons (Const a) Nil) = I.showsPrec 0 a
     showsHelper (Cons (Const a) as) = foldr (.) id $
-        [ shows a
+        [ I.showsPrec 0 a
         , showString ", "
         , showsHelper as
         ]
@@ -357,15 +367,37 @@ instance Bounded (Product g Nil) where
 
 
 ------------------------------------------------------------------------------
-instance (Bounded (g a), Bounded (Product g as)) =>
+instance (I.Bounded (g a), Bounded (Product g as)) =>
     Bounded (Product g (Cons a as))
   where
-    minBound = Cons minBound minBound
-    maxBound = Cons maxBound maxBound
+    minBound = Cons I.minBound minBound
+    maxBound = Cons I.maxBound maxBound
 
 
+#if __GLASGOW_HASKELL__ >= 700
 ------------------------------------------------------------------------------
-instance Enum (Product g Nil) where
+instance I.Enum (Product g as) => Enum (Product g as) where
+    enumFrom = I.enumFrom
+    {-# INLINE enumFrom #-}
+    enumFromThen = I.enumFromThen
+    {-# INLINE enumFromThen #-}
+    enumFromThenTo = I.enumFromThenTo
+    {-# INLINE enumFromThenTo #-}
+    enumFromTo = I.enumFromTo
+    {-# INLINE enumFromTo #-}
+    fromEnum = fromInteger . I.fromEnum
+    {-# INLINE fromEnum #-}
+    pred = I.pred
+    {-# INLINE pred #-}
+    succ = I.succ
+    {-# INLINE succ #-}
+    toEnum = I.toEnum . toInteger
+    {-# INLINE toEnum #-}
+
+
+#endif
+------------------------------------------------------------------------------
+instance I.Enum (Product g Nil) where
     fromEnum _ = 0
     toEnum 0 = Nil
     toEnum _ = error "Enum{Data.Product}.toEnum: bad argument"
@@ -373,40 +405,55 @@ instance Enum (Product g Nil) where
 
 ------------------------------------------------------------------------------
 instance
-    ( Enum (g a)
-    , Eq (g a)
+    ( I.Enum (g a)
+    , I.Eq (g a)
     , Bounded (Product g as)
-    , Enum (Product g as)
+    , I.Enum (Product g as)
     , Eq (Product g as)
     )
   =>
-    Enum (Product g (Cons a as))
+    I.Enum (Product g (Cons a as))
   where
     succ (Cons a as)
-        | as == maxBound = Cons (succ a) minBound
-        | otherwise = Cons a (succ as)
+        | as == maxBound = Cons (I.succ a) minBound
+        | otherwise = Cons a (I.succ as)
     pred (Cons a as)
-        | as == minBound = Cons (pred a) maxBound
-        | otherwise = Cons a (pred as)
-    fromEnum (Cons a as) =
-        (fromEnum a * (fromEnum (maxBound :: Product g as) + 1)) + fromEnum as
-    toEnum n = Cons (toEnum a) (toEnum as)
+        | as == minBound = Cons (I.pred a) maxBound
+        | otherwise = Cons a (I.pred as)
+    fromEnum (Cons a as) = I.fromEnum as +
+        (I.fromEnum a * (I.fromEnum (maxBound :: Product g as) + 1))
+    toEnum n = Cons (I.toEnum a) (I.toEnum as)
       where
-        (a, as) = divMod n (fromEnum (maxBound :: Product g as) + 1)
-    enumFrom a = a : enumFrom (succ a)
+        (a, as) = divMod n (I.fromEnum (maxBound :: Product g as) + 1)
+    enumFrom a = a : I.enumFrom (succ a)
     enumFromTo a b
         | a == b = [a]
-        | otherwise = a : enumFromTo (succ a) b
+        | otherwise = a : I.enumFromTo (succ a) b
 
 
+#if __GLASGOW_HASKELL__ >= 700
 ------------------------------------------------------------------------------
-instance (Enum (Product g as), Ord (Product g as)) => Ix (Product g as) where
-    range = uncurry enumFromTo
+instance (I.Ix (Product g as), Ord (Product g as)) => Ix (Product g as) where
+    index = \r -> fromInteger . I.index r
+    {-# INLINE index #-}
+    inRange = I.inRange
+    {-# INLINE inRange #-}
+    range = I.range
+    {-# INLINE range #-}
+    rangeSize = fromInteger . I.rangeSize
+    {-# INLINE rangeSize #-}
+
+
+#endif
+------------------------------------------------------------------------------
+instance (I.Enum (Product g as), I.Ord (Product g as)) => I.Ix (Product g as)
+  where
+    range = uncurry I.enumFromTo
     index (a, b) i
-        | inRange (a, b) i = toEnum (fromEnum i - fromEnum a)
+        | I.inRange (a, b) i = I.fromEnum i - I.fromEnum a
         | otherwise = error "Ix{Data.Product}.index: error in array index"
     {-# INLINE index #-}
-    inRange (a, b) i = i >= a && i <= b
+    inRange (a, b) i = i I.>= a && i I.<= b
 
 
 #if MIN_VERSION_base(4, 9, 0)
@@ -416,10 +463,10 @@ instance Semigroup (Product g Nil) where
 
 
 ------------------------------------------------------------------------------
-instance (Semigroup (g a), Semigroup (Product g as)) =>
+instance (I.Semigroup (g a), Semigroup (Product g as)) =>
     Semigroup (Product g (Cons a as))
   where
-    Cons a as <> Cons b bs = Cons (a <> b) (as <> bs)
+    Cons a as <> Cons b bs = Cons (a I.<> b) (as <> bs)
 
 
 #endif
@@ -430,11 +477,11 @@ instance Monoid (Product g Nil) where
 
 
 ------------------------------------------------------------------------------
-instance (Monoid (g a), Monoid (Product g as)) =>
+instance (I.Monoid (g a), Monoid (Product g as)) =>
     Monoid (Product g (Cons a as))
   where
-    mempty = Cons mempty mempty
-    mappend (Cons a as) (Cons b bs) = Cons (mappend a b) (mappend as bs)
+    mempty = Cons I.mempty mempty
+    mappend (Cons a as) (Cons b bs) = Cons (I.mappend a b) (mappend as bs)
 
 
 ------------------------------------------------------------------------------
@@ -446,26 +493,26 @@ instance Storable (Product g Nil) where
 
 
 ------------------------------------------------------------------------------
-instance (Storable (g a), Storable (Product g as)) =>
+instance (I.Storable (g a), Storable (Product g as)) =>
     Storable (Product g (Cons a as))
   where
     sizeOf _ = roundUpToNearestMultipleOf
-        (sizeOf (undefined :: g a))
+        (I.sizeOf (undefined :: g a))
         (alignment (undefined :: Product g as)) +
             sizeOf (undefined :: Product g as)
-    alignment _ = alignment (undefined :: g a)
+    alignment _ = I.alignment (undefined :: g a)
     peek ptr = do
-        a <- peek (castPtr ptr)
+        a <- I.peek (castPtr ptr)
         as <- peek (plusPtr ptr
             (roundUpToNearestMultipleOf
-                (sizeOf a)
+                (I.sizeOf a)
                 (alignment (undefined :: Product g as))))
         return $ Cons a as
     poke ptr (Cons a as) = do
-        poke (castPtr ptr) a
+        I.poke (castPtr ptr) a
         poke
             (plusPtr ptr
-                (roundUpToNearestMultipleOf (sizeOf a) (alignment as)))
+                (roundUpToNearestMultipleOf (I.sizeOf a) (alignment as)))
             as
 
 
