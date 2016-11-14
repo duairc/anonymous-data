@@ -39,7 +39,6 @@ where
 -- anonymous-data ------------------------------------------------------------
 import           Data.Field (Field)
 import qualified Data.Classes as I
-import           Data.Uncurry (Uncurry)
 
 
 -- base ----------------------------------------------------------------------
@@ -169,7 +168,7 @@ instance (ReadHelper (Const b) as, PlainRead (Const b) as) =>
 
 
 ------------------------------------------------------------------------------
-instance (ReadHelper (Uncurry Field) as, PlainRead (Uncurry Field) as) =>
+instance (ReadHelper Field as, PlainRead Field as) =>
     Read (Record as)
   where
     readsPrec _ s = msum
@@ -305,7 +304,7 @@ instance ShowHelper (Const b) as => Show (Product (Const b) as) where
 
 
 ------------------------------------------------------------------------------
-instance ShowHelper (Uncurry Field) as => Show (Record as) where
+instance ShowHelper Field as => Show (Record as) where
     showsPrec _ as = foldr (.) id $
         [ showString "{"
         , showsHelper as
@@ -590,7 +589,7 @@ instance (NFData (g a), NFData (Product g as)) =>
 
 
 ------------------------------------------------------------------------------
-type Record = Product (Uncurry Field)
+type Record = Product Field
 
 
 ------------------------------------------------------------------------------
