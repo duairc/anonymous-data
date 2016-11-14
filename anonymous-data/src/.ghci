@@ -1,0 +1,1 @@
+:set -optP-include -optP../dist/build/autogen/cabal_macros.h -I../include
