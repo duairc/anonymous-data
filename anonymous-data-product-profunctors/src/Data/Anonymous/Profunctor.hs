@@ -11,7 +11,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 #if __GLASGOW_HASKELL__ >= 702
-{-# LANGUAGE Safe #-}
+{-# LANGUAGE Trustworthy #-}
 #endif
 
 #if __GLASGOW_HASKELL__ >= 706
@@ -29,7 +29,6 @@ where
 
 -- anonymous-data ------------------------------------------------------------
 import           Data.Anonymous.Product (Product (Cons, Nil), Record, Tuple)
-import           Data.Uncurry (Uncurry (Uncurry))
 import           Data.Field (Field (Field))
 
 
@@ -83,24 +82,24 @@ instance
 ------------------------------------------------------------------------------
 instance
     ( ProductProfunctor p
-    , ProductAdaptor p (Uncurry Field) abs as bs
+    , ProductAdaptor p Field abs as bs
     , KnownSymbol s
     )
   =>
-    ProductAdaptor p (Uncurry Field)
+    ProductAdaptor p Field
         (Cons (Pair s (p a b)) abs)
         (Cons (Pair s a) as)
         (Cons (Pair s b) bs)
   where
-    pProduct (Cons (Uncurry (Field a)) as) = dimap
-        (\(Cons (Uncurry (Field a_)) as_) -> (a_, as_))
-        (\(a_, as_) -> Cons (Uncurry (Field a_)) as_)
+    pProduct (Cons (Field a) as) = dimap
+        (\(Cons (Field a_) as_) -> (a_, as_))
+        (\(a_, as_) -> Cons (Field a_) as_)
         (a ***! pProduct as)
 
 
 ------------------------------------------------------------------------------
 pRecord
-    :: ProductAdaptor p (Uncurry Field) abs as bs
+    :: ProductAdaptor p Field abs as bs
     => Record abs -> p (Record as) (Record bs)
 pRecord = pProduct
 
@@ -135,13 +134,6 @@ instance
 
 ------------------------------------------------------------------------------
 instance (Profunctor p, Default p a b, KnownSymbol s) =>
-    Default p (Field s a) (Field s b)
+    Default p (Field (Pair s a)) (Field (Pair s b))
   where
-    def = dimap (\(Field a) -> a) Field def
-
-
-------------------------------------------------------------------------------
-instance (Profunctor p, Default p (f a b) (g c d)) =>
-    Default p (Uncurry f (Pair a b)) (Uncurry g (Pair c d))
-  where
-    def = dimap (\(Uncurry f) -> f) Uncurry (def :: p (f a b) (g c d))
+    def = dimap (\(Field a) -> a) Field (def :: p a b)

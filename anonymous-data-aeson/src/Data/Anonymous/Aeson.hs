@@ -40,7 +40,6 @@ import           Data.Aeson
 
 -- anonymous-data ------------------------------------------------------------
 import           Data.Anonymous.Product (Product (Cons, Nil), Record)
-import           Data.Uncurry (Uncurry (Uncurry))
 import           Data.Field (Field (Field))
 
 
@@ -77,13 +76,8 @@ import qualified Data.Vector as V (cons, head, null, tail)
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, FromJSON a) => FromJSON (Field s a) where
+instance (KnownSymbol s, FromJSON a) => FromJSON (Field (Pair s a)) where
     parseJSON = fmap Field . parseJSON
-
-
-------------------------------------------------------------------------------
-instance FromJSON (f a b) => FromJSON (Uncurry f (Pair a b)) where
-    parseJSON = fmap Uncurry . parseJSON
 
 
 ------------------------------------------------------------------------------
@@ -114,13 +108,8 @@ instance __OVERLAPPING__ (KnownSymbol s, FromJSON a, FromJSON (Record as)) =>
 
 
 ------------------------------------------------------------------------------
-instance ToJSON a => ToJSON (Field s a) where
+instance ToJSON a => ToJSON (Field (Pair s a)) where
     toJSON (Field a) = toJSON a
-
-
-------------------------------------------------------------------------------
-instance ToJSON (f a b) => ToJSON (Uncurry f (Pair a b)) where
-    toJSON (Uncurry f) = toJSON f
 
 
 ------------------------------------------------------------------------------

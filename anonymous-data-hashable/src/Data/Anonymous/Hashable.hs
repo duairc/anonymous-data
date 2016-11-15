@@ -20,7 +20,6 @@ where
 
 -- anonymous-data ------------------------------------------------------------
 import           Data.Anonymous.Product (Product (Cons, Nil))
-import           Data.Uncurry (Uncurry (Uncurry))
 import           Data.Field (Field (Field))
 
 
@@ -34,13 +33,8 @@ import           Type.Tuple.Pair (Pair)
 
 
 ------------------------------------------------------------------------------
-instance Hashable a => Hashable (Field s a) where
+instance Hashable a => Hashable (Field (Pair s a)) where
     hashWithSalt s (Field a) = hashWithSalt s a
-
-
-------------------------------------------------------------------------------
-instance Hashable (f a b) => Hashable (Uncurry f (Pair a b)) where
-    hashWithSalt s (Uncurry f) = hashWithSalt s f
 
 
 ------------------------------------------------------------------------------
