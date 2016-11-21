@@ -29,6 +29,8 @@
 module Data.Field
     ( Field (Field)
     , field
+    , (.=)
+    , at
     -- * Functor
     , (<$)
     , ($>)
@@ -297,6 +299,19 @@ data Field (p :: KPair (KString, *)) where
 field :: KnownSymbol s => proxy s -> a -> Field (Pair s a)
 field _ = Field
 {-# INLINE field #-}
+
+
+------------------------------------------------------------------------------
+(.=) :: KnownSymbol s => proxy s -> a -> Field (Pair s a)
+(.=) _ = Field
+infix 6 .=
+{-# INLINE (.=) #-}
+
+
+------------------------------------------------------------------------------
+at :: forall s. Proxy s
+at = Proxy
+{-# INLINE at #-}
 
 
 ------------------------------------------------------------------------------

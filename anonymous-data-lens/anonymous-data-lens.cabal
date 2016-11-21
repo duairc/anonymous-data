@@ -25,14 +25,10 @@ library
   exposed-modules:
     Data.Anonymous.Product.Lens
     Data.Anonymous.Sum.Lens
-    Type.List.Fields
 
   build-depends:
     anonymous-data >= 0.1 && < 0.2,
-    base >= 4.7 && < 5
-
-  if impl(ghc < 7.10)
-    build-depends: transformers > 0.2 && < 0.6
+    base >= 4.3 && < 5
 
   ghc-options: -Wall
 
