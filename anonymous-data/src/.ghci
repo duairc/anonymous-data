@@ -1,1 +1,5 @@
 :set -optP-include -optP../dist/build/autogen/cabal_macros.h -I../include
+:set prompt "> "
+:load Data/Field.hs
+import Type.TH ()
+import Data.Field (at, (.=))

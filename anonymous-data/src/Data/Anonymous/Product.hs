@@ -790,13 +790,13 @@ infixr 5 <++>
 
 
 ------------------------------------------------------------------------------
-instance bs ~ (Nil :<> bs) => Nil :<++> bs where
+instance (bs ~ (Nil :<> bs)) => (:<++>) Nil bs where
     Nil <++> bs = bs
 
 
 ------------------------------------------------------------------------------
 instance (as :<++> bs, (Cons a as :<> bs) ~ (Cons a (as :<> bs))) =>
-    Cons a as :<++> bs
+    (:<++>) (Cons a as) bs
   where
     Cons a as <++> bs = Cons a (as <++> bs)
 
@@ -987,7 +987,7 @@ class
         (n :: KPoly1)
         (as :: KList (KPoly1))
   where
-    updateElement' :: f n -> Product f as -> Product f (T.UpdateElement n as)
+    updateElement' :: f n -> Product f as -> Product f as
 
 
 #ifdef ClosedTypeFamilies
