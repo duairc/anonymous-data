@@ -45,11 +45,17 @@ module Data.Anonymous.Product
     , Tuple
     , Record
     , Options
-    , (<:>)
     , (<::>)
+    , (<:>)
+    , (<:.>)
+    , (<:?>)
+    , (<:->)
 #ifdef LanguagePatternSynonyms
-    , pattern (:<:>)
     , pattern (:<::>)
+    , pattern (:<:>)
+    , pattern (:<:.>)
+    , pattern (:<:?>)
+    , pattern (:<:->)
 #endif
     , (:<++>) ((<++>))
     , LookupIndex'
@@ -168,7 +174,7 @@ module Data.Anonymous.Product
 where
 
 -- anonymous-data ------------------------------------------------------------
-import           Data.Field (Field)
+import           Data.Field (Field (Field))
 import qualified Data.Classes as I
 #ifdef ClosedTypeFamilies
 import qualified Type.List.Fields as T
@@ -178,7 +184,7 @@ import qualified Type.List.Fields as T
 -- base ----------------------------------------------------------------------
 import           Control.Applicative (Const (Const))
 import           Control.Monad (msum)
-import           Data.Functor.Compose (Compose)
+import           Data.Functor.Compose (Compose (Compose))
 import           Data.Functor.Identity (Identity (Identity))
 import           Data.Ix
                      ( Ix
@@ -190,7 +196,7 @@ import           Data.Ix
                      )
 import qualified Data.Ix (index)
 import           Data.Monoid
-                     ( First
+                     ( First (First)
 #if !MIN_VERSION_base(4, 8, 0)
                      , Monoid
                      , mappend
@@ -244,6 +250,7 @@ import           Control.DeepSeq (NFData, rnf)
 -- types ---------------------------------------------------------------------
 import           GHC.TypeLits.Compat
                      ( (:-)
+                     , KnownSymbol
 #ifdef DataPolyKinds
                      , Nat
 #endif
@@ -757,28 +764,80 @@ type Options = Product (Compose First Field)
 
 
 ------------------------------------------------------------------------------
-(<:>) :: f a -> Product f as -> Product f (Cons a as)
-(<:>) = Cons
+(<::>) :: f a -> Product f as -> Product f (Cons a as)
+(<::>) = Cons
+infixr 5 <::>
+
+
+------------------------------------------------------------------------------
+(<:>) :: a -> Tuple as -> Tuple (Cons a as)
+(<:>) = Cons . Identity
 infixr 5 <:>
 
 
 ------------------------------------------------------------------------------
-(<::>) :: a -> Product Identity as -> Product Identity (Cons a as)
-(<::>) = Cons . Identity
-infixr 5 <::>
+(<:.>) :: forall s a as. KnownSymbol s
+    => a
+    -> Record as
+    -> Record (Cons (Pair s a) as)
+(<:.>) = Cons . Field
+infixr 5 <:.>
+
+
+------------------------------------------------------------------------------
+(<:?>) :: forall s a as. KnownSymbol s
+    => a
+    -> Options as
+    -> Options (Cons (Pair s a) as)
+(<:?>) = Cons . Compose . First . Just . Field
+infixr 5 <:?>
+
+
+------------------------------------------------------------------------------
+(<:->) :: forall s a as. KnownSymbol s
+    => Options as
+    -> Options (Cons (Pair s a) as)
+(<:->) as = Cons (Compose (First Nothing)) as
+infixr 5 <:->
 
 
 #ifdef LanguagePatternSynonyms
 ------------------------------------------------------------------------------
-pattern (:<:>) :: f a -> Product f as -> Product f (Cons a as)
-pattern (:<:>) a as = Cons a as
+pattern (:<::>) :: f a -> Product f as -> Product f (Cons a as)
+pattern (:<::>) a as = Cons a as
+infixr 5 :<::>
+
+
+------------------------------------------------------------------------------
+pattern (:<:>) :: a -> Tuple as -> Tuple (Cons a as)
+pattern (:<:>) a as = Cons (Identity a) as
 infixr 5 :<:>
 
 
 ------------------------------------------------------------------------------
-pattern (:<::>) :: a -> Product Identity as -> Product Identity (Cons a as)
-pattern (:<::>) a as = Cons (Identity a) as
-infixr 5 :<::>
+pattern (:<:.>) :: forall s a as. KnownSymbol s
+    => a
+    -> Record as
+    -> Record (Cons (Pair s a) as)
+pattern (:<:.>) a as = Cons (Field a) as
+infixr 5 :<:.>
+
+
+------------------------------------------------------------------------------
+pattern (:<:?>) :: forall s a as. KnownSymbol s
+    => a
+    -> Options as
+    -> Options (Cons (Pair s a) as)
+pattern (:<:?>) a as = Cons (Compose (First (Just (Field a)))) as
+infixr 5 :<:?>
+
+
+------------------------------------------------------------------------------
+pattern (:<:->) :: forall s a as. KnownSymbol s
+    => Options as
+    -> Options (Cons (Pair s a) as)
+pattern (:<:->) as = Cons (Compose (First Nothing)) as
+infixr 5 :<:->
 
 
 #endif
