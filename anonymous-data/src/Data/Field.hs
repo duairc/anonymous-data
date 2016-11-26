@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -8,6 +7,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -116,7 +116,7 @@ module Data.Field
     , liftReadList
     , liftShowsPrec
     , liftShowList
-#if MIN_VERSION_base(4, 4, 0)
+#ifdef GenericDeriving
     -- * Generic1
     , Rep1
     , from1
@@ -125,6 +125,12 @@ module Data.Field
     )
 where
 
+#ifdef GenericDeriving
+-- anonymous-data ------------------------------------------------------------
+import qualified Symbols as S
+
+
+#endif
 -- base ----------------------------------------------------------------------
 import           Control.Applicative
                      (
@@ -136,7 +142,9 @@ import           Control.Applicative
                      , empty
                      )
 import qualified Control.Applicative (pure, (<*>))
+#ifdef GenericDeriving
 import           Control.Arrow ((***))
+#endif
 import           Control.Monad (guard)
 import qualified Control.Monad ((>>=))
 import           Control.Monad.Fix (MonadFix)
@@ -279,7 +287,7 @@ import           Control.DeepSeq (NFData, rnf)
 
 
 -- types ---------------------------------------------------------------------
-#if MIN_VERSION_base(4, 4, 0)
+#ifdef GenericDeriving
 import           GHC.Generics.Compat
                      ( D1
                      , C1
@@ -301,8 +309,8 @@ import           GHC.Generics.Compat
                      , from
                      , to
                      )
-#endif
 import qualified GHC.Generics.Compat (Rep1, from1, to1)
+#endif
 import           GHC.TypeLits.Compat
                      ( KnownSymbol
 #ifdef DataPolyKinds
@@ -310,15 +318,11 @@ import           GHC.TypeLits.Compat
 #endif
                      , symbolVal
                      )
+#ifdef GenericDeriving
 import           Type.Bool (False, True)
 import           Type.Maybe (Nothing)
-import           Type.Meta
-                     ( Proxy (Proxy)
-#ifndef UseTypeLits
-                     , Known
-                     , val
 #endif
-                     )
+import           Type.Meta (Proxy (Proxy))
 import           Type.Tuple.Pair (Pair)
 
 
@@ -894,7 +898,7 @@ liftShowsPrec showsPrec_ _ p (Field a) = showParen (p > 10) $ T.foldr (.) id
     ]
 
 
-#if MIN_VERSION_base(4, 4, 0)
+#ifdef GenericDeriving
 ------------------------------------------------------------------------------
 type Rep1 = D1 FieldMetaData (C1 FieldMetaCons (S1 FieldMetaSel Par1))
 
@@ -1112,28 +1116,10 @@ instance (KnownSymbol s, IsString a) => IsString (Field (Pair s a)) where
     fromString = Field . fromString
 
 
-#if MIN_VERSION_base(4, 4, 0)
+#ifdef GenericDeriving
 ------------------------------------------------------------------------------
-#ifdef UseTypeLits
-type Field_ = "Field"
-type Field1_ = "Field1"
-type DataFieldField_ = "Data.Field.Field"
-type AnonymousData_ = "anonymous-data"
-#else
-data Field_
-data Field1_
-data DataFieldField_
-data AnonymousData_
-instance Known String Field_ where val _ = "Field"
-instance Known String Field1_ where val _ = "Field1"
-instance Known String DataFieldField_ where val _ = "Data.Field.Field"
-instance Known String AnonymousData_ where val _ = "anonymous-data"
-#endif
-
-
-------------------------------------------------------------------------------
-type FieldMetaData = MetaData Field_ DataFieldField_ AnonymousData_ False
-type FieldMetaCons = MetaCons Field_ PrefixI False
+type FieldMetaData = MetaData S.Field S.DataField S.AnonymousData False
+type FieldMetaCons = MetaCons S.Field PrefixI False
 type FieldMetaSel
     = MetaSel Nothing NoSourceUnpackedness SourceStrict DecidedStrict
 
@@ -1159,37 +1145,38 @@ newtype Field1 s a = Field1 (Field (Pair s a))
   deriving
     ( Eq
     , Ord
-    , Read
     , Show
-    , Bounded
-    , Enum
-    , Ix
 #if MIN_VERSION_base(4, 9, 0)
     , Semigroup
 #endif
-    , Monoid
-    , Storable
-    , Num
-    , Real
-    , Integral
-    , Fractional
-    , Floating
-    , RealFrac
-    , RealFloat
-    , Bits
-#if MIN_VERSION_base(4, 7, 0)
-    , FiniteBits
-#endif
-    , IsString
 #ifdef PolyTypeable
     , Typeable
 #endif
     )
+deriving instance (KnownSymbol s, Read a) => Read (Field1 s a)
+deriving instance (KnownSymbol s, Bounded a) => Bounded (Field1 s a)
+deriving instance (KnownSymbol s, Enum a) => Enum (Field1 s a)
+deriving instance (KnownSymbol s, Ix a) => Ix (Field1 s a)
+deriving instance (KnownSymbol s, Storable a) => Storable (Field1 s a)
+deriving instance (KnownSymbol s, Monoid a) => Monoid (Field1 s a)
+deriving instance (KnownSymbol s, Num a) => Num (Field1 s a)
+deriving instance (KnownSymbol s, Real a) => Real (Field1 s a)
+deriving instance (KnownSymbol s, Integral a) => Integral (Field1 s a)
+deriving instance (KnownSymbol s, Fractional a) => Fractional (Field1 s a)
+deriving instance (KnownSymbol s, Floating a) => Floating (Field1 s a)
+deriving instance (KnownSymbol s, RealFrac a) => RealFrac (Field1 s a)
+deriving instance (KnownSymbol s, RealFloat a) => RealFloat (Field1 s a)
+deriving instance (KnownSymbol s, Bits a) => Bits (Field1 s a)
+#if MIN_VERSION_base(4, 7, 0)
+deriving instance (KnownSymbol s, FiniteBits a) => FiniteBits (Field1 s a)
+#endif
+deriving instance (KnownSymbol s, IsString a) => IsString (Field1 s a)
+#ifdef GenericDeriving
 
 
 ------------------------------------------------------------------------------
-type Field1MetaData = MetaData Field1_ DataFieldField_ AnonymousData_ True
-type Field1MetaCons = MetaCons Field1_ PrefixI False
+type Field1MetaData = MetaData S.Field1 S.DataField S.AnonymousData True
+type Field1MetaCons = MetaCons S.Field1 PrefixI False
 type Field1MetaSel
     = MetaSel Nothing NoSourceUnpackedness SourceStrict DecidedStrict
 
@@ -1204,10 +1191,15 @@ instance KnownSymbol s => Generic (Field1 s a) where
 
 ------------------------------------------------------------------------------
 instance KnownSymbol s => Generic1 (Field1 s) where
+#if __GLASGOW_HASKELL__ < 704
+    type GHC.Generics.Compat.Rep1 (Field1 s) =
+#else
     type Rep1 (Field1 s) =
+#endif
         D1 Field1MetaData (C1 Field1MetaCons (S1 Field1MetaSel Rep1))
     from1 (Field1 a) = M1 (M1 (M1 (from1 a)))
     to1 (M1 (M1 (M1 a))) = Field1 (to1 a)
+#endif
 
 
 ------------------------------------------------------------------------------
@@ -1274,6 +1266,7 @@ instance KnownSymbol s => Monad (Field1 s) where
 instance KnownSymbol s => MonadFix (Field1 s) where
     mfix f = Field1 $ mfix (\a -> let Field1 b = f a in b)
     {-# INLINE mfix #-}
+#if MIN_VERSION_base(4, 4, 0)
 
 
 ------------------------------------------------------------------------------
@@ -1282,3 +1275,4 @@ instance KnownSymbol s => MonadZip (Field1 s) where
     {-# INLINE munzip #-}
     mzipWith f (Field1 a) (Field1 b) = Field1 (mzipWith f a b)
     {-# INLINE mzipWith #-}
+#endif

@@ -34,6 +34,7 @@
 
 #ifdef LanguagePatternSynonyms
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 #endif
 
 #ifdef SafeHaskell
@@ -49,13 +50,13 @@ module Data.Anonymous.Product
     , (<:>)
     , (<:.>)
     , (<:?>)
-    , (<:->)
 #ifdef LanguagePatternSynonyms
     , pattern (:<::>)
     , pattern (:<:>)
     , pattern (:<:.>)
+#if __GLASGOW_HASKELL__ >= 800
     , pattern (:<:?>)
-    , pattern (:<:->)
+#endif
 #endif
     , (:<++>) ((<++>))
     , LookupIndex'
@@ -176,6 +177,9 @@ where
 -- anonymous-data ------------------------------------------------------------
 import           Data.Field (Field (Field))
 import qualified Data.Classes as I
+#ifdef GenericDeriving
+import qualified Symbols as S
+#endif
 #ifdef ClosedTypeFamilies
 import qualified Type.List.Fields as T
 #endif
@@ -218,7 +222,7 @@ import           Control.DeepSeq (NFData, rnf)
 
 
 -- types ---------------------------------------------------------------------
-#if MIN_VERSION_base(4, 4, 0)
+#ifdef GenericDeriving
 import           GHC.Generics.Compat
                      ( (:*:) ((:*:))
                      , D1
@@ -250,16 +254,14 @@ import           GHC.TypeLits.Compat
                      , One
                      , Zero
                      )
+#ifdef GenericDeriving
 import           Type.Bool (False)
-import           Type.List (Cons, Nil)
-import           Type.Maybe (Nothing)
-import           Type.Meta
-                     ( Proxy (Proxy)
-#ifndef UseTypeLits
-                     , Known
-                     , val
 #endif
-                     )
+import           Type.List (Cons, Nil)
+#ifdef GenericDeriving
+import           Type.Maybe (Nothing)
+#endif
+import           Type.Meta (Proxy (Proxy))
 #if __GLASGOW_HASKELL__ < 700
 import           Type.Natural (Natural)
 #endif
@@ -684,34 +686,12 @@ roundUpToNearestMultipleOf :: Integral a => a -> a -> a
 roundUpToNearestMultipleOf n m = n + m - mod n m
 
 
-#if MIN_VERSION_base(4, 4, 0)
-------------------------------------------------------------------------------
-#ifdef UseTypeLits
-type Product_ = "Product"
-type DataAnonymousProductProduct_ = "Data.Anonymous.Product.Product"
-type AnonymousData_ = "anonymous-data"
-type Nil_ = "Nil"
-type Cons_ = "Cons"
-#else
-data Product_
-data DataAnonymousProductProduct_
-data AnonymousData_
-data Nil_
-data Cons_
-instance Known String Product_ where val _ = "Product"
-instance Known String DataAnonymousProductProduct_ where
-    val _ = "Data.Anonymous.Product.Product"
-instance Known String AnonymousData_ where val _ = "anonymous-data"
-instance Known String Nil_ where val _ = "Nil"
-instance Known String Cons_ where val _ = "Cons"
-#endif
-
-
+#ifdef GenericDeriving
 ------------------------------------------------------------------------------
 type ProductMetaData =
-    MetaData Product_ DataAnonymousProductProduct_ AnonymousData_ False
-type ProductMetaConsNil = MetaCons Nil_ PrefixI False
-type ProductMetaConsCons = MetaCons Cons_ PrefixI False
+    MetaData S.Product S.DataAnonymousProduct S.AnonymousData False
+type ProductMetaConsNil = MetaCons S.Nil PrefixI False
+type ProductMetaConsCons = MetaCons S.Cons PrefixI False
 type ProductMetaSelCons0 =
     MetaSel Nothing NoSourceUnpackedness NoSourceStrictness DecidedLazy
 type ProductMetaSelCons1 =
@@ -784,19 +764,11 @@ infixr 5 <:.>
 
 ------------------------------------------------------------------------------
 (<:?>) :: forall s a as. KnownSymbol s
-    => a
+    => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
-(<:?>) = Cons . Compose . First . Just . Field
+(<:?>) = Cons . Compose . First . fmap Field
 infixr 5 <:?>
-
-
-------------------------------------------------------------------------------
-(<:->) :: forall s a as. KnownSymbol s
-    => Options as
-    -> Options (Cons (Pair s a) as)
-(<:->) as = Cons (Compose (First Nothing)) as
-infixr 5 <:->
 
 
 #ifdef LanguagePatternSynonyms
@@ -821,23 +793,25 @@ pattern (:<:.>) a as = Cons (Field a) as
 infixr 5 :<:.>
 
 
+#if __GLASGOW_HASKELL__ >= 800
+-- Doesn't compile in GHC 7.10, seems to be compiler bug
 ------------------------------------------------------------------------------
 pattern (:<:?>) :: forall s a as. KnownSymbol s
-    => a
+    => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
-pattern (:<:?>) a as = Cons (Compose (First (Just (Field a)))) as
+pattern a :<:?> as <- Cons (Compose (First (viewOption -> a))) as
+  where
+    (:<:?>) = (<:?>)
 infixr 5 :<:?>
 
 
 ------------------------------------------------------------------------------
-pattern (:<:->) :: forall s a as. KnownSymbol s
-    => Options as
-    -> Options (Cons (Pair s a) as)
-pattern (:<:->) as = Cons (Compose (First Nothing)) as
-infixr 5 :<:->
+viewOption :: Maybe (Field (Pair s a)) -> Maybe a
+viewOption = fmap (\(Field a) -> a)
 
 
+#endif
 #endif
 ------------------------------------------------------------------------------
 class (as :: KList (KPoly1)) :<++> (bs :: KList (KPoly1)) where
