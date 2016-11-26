@@ -211,8 +211,15 @@ import           Data.Typeable (Typeable)
 #endif
 import           Foreign.Ptr (castPtr, plusPtr)
 import           Foreign.Storable (Storable, alignment, peek, poke, sizeOf)
+
+
+-- deepseq -------------------------------------------------------------------
+import           Control.DeepSeq (NFData, rnf)
+
+
+-- types ---------------------------------------------------------------------
 #if MIN_VERSION_base(4, 4, 0)
-import           GHC.Generics
+import           GHC.Generics.Compat
                      ( (:*:) ((:*:))
                      , D1
                      , C1
@@ -223,31 +230,17 @@ import           GHC.Generics
                      , U1 (U1)
                      , Rec0
                      , Rep
-#if MIN_VERSION_base(4, 9, 0)
-                     , FixityI (PrefixI)
-                     , Meta (MetaCons, MetaData, MetaSel)
-                     , SourceUnpackedness (NoSourceUnpackedness)
-                     , SourceStrictness (NoSourceStrictness)
-                     , DecidedStrictness (DecidedLazy)
-#else
-                     , Constructor
-                     , Datatype
-                     , NoSelector
-                     , conName
-                     , datatypeName
-                     , moduleName
-#endif
+                     , PrefixI
+                     , DecidedLazy
+                     , MetaCons
+                     , MetaData
+                     , MetaSel
+                     , NoSourceUnpackedness
+                     , NoSourceStrictness
                      , from
                      , to
                      )
 #endif
-
-
--- deepseq -------------------------------------------------------------------
-import           Control.DeepSeq (NFData, rnf)
-
-
--- types ---------------------------------------------------------------------
 import           GHC.TypeLits.Compat
                      ( (:-)
                      , KnownSymbol
@@ -257,8 +250,16 @@ import           GHC.TypeLits.Compat
                      , One
                      , Zero
                      )
+import           Type.Bool (False)
 import           Type.List (Cons, Nil)
-import           Type.Meta (Proxy (Proxy))
+import           Type.Maybe (Nothing)
+import           Type.Meta
+                     ( Proxy (Proxy)
+#ifndef UseTypeLits
+                     , Known
+                     , val
+#endif
+                     )
 #if __GLASGOW_HASKELL__ < 700
 import           Type.Natural (Natural)
 #endif
@@ -685,41 +686,38 @@ roundUpToNearestMultipleOf n m = n + m - mod n m
 
 #if MIN_VERSION_base(4, 4, 0)
 ------------------------------------------------------------------------------
-#if MIN_VERSION_base(4, 9, 0)
-type ProductMetaData
-    = 'MetaData "Product" "Data.Anonymous.Product.Product" "anonymous-data"
-        'False
-type ProductMetaConsNil = 'MetaCons "Nil" 'PrefixI 'False
-type ProductMetaConsCons = 'MetaCons "Cons" 'PrefixI 'False
-type ProductMetaSelCons0
-    = 'MetaSel 'Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy
-type ProductMetaSelCons1
-    = 'MetaSel 'Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy
+#ifdef UseTypeLits
+type Product_ = "Product"
+type DataAnonymousProductProduct_ = "Data.Anonymous.Product.Product"
+type AnonymousData_ = "anonymous-data"
+type Nil_ = "Nil"
+type Cons_ = "Cons"
 #else
-data ProductMetaData
-data ProductMetaConsNil
-data ProductMetaConsCons
-type ProductMetaSelCons0 = NoSelector
-type ProductMetaSelCons1 = NoSelector
-
-
-------------------------------------------------------------------------------
-instance Datatype ProductMetaData where
-    datatypeName _ = "Product"
-    moduleName _ = "Data.Product"
-
-
-------------------------------------------------------------------------------
-instance Constructor ProductMetaConsNil where
-    conName _ = "Nil"
-
-
-------------------------------------------------------------------------------
-instance Constructor ProductMetaConsCons where
-    conName _ = "Cons"
-
-
+data Product_
+data DataAnonymousProductProduct_
+data AnonymousData_
+data Nil_
+data Cons_
+instance Known String Product_ where val _ = "Product"
+instance Known String DataAnonymousProductProduct_ where
+    val _ = "Data.Anonymous.Product.Product"
+instance Known String AnonymousData_ where val _ = "anonymous-data"
+instance Known String Nil_ where val _ = "Nil"
+instance Known String Cons_ where val _ = "Cons"
 #endif
+
+
+------------------------------------------------------------------------------
+type ProductMetaData =
+    MetaData Product_ DataAnonymousProductProduct_ AnonymousData_ False
+type ProductMetaConsNil = MetaCons Nil_ PrefixI False
+type ProductMetaConsCons = MetaCons Cons_ PrefixI False
+type ProductMetaSelCons0 =
+    MetaSel Nothing NoSourceUnpackedness NoSourceStrictness DecidedLazy
+type ProductMetaSelCons1 =
+    MetaSel Nothing NoSourceUnpackedness NoSourceStrictness DecidedLazy
+
+
 ------------------------------------------------------------------------------
 instance Generic (Product g Nil) where
     type Rep (Product g Nil) = D1 ProductMetaData (C1 ProductMetaConsNil U1)

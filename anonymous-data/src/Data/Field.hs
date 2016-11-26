@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -194,35 +195,6 @@ import           Data.Typeable (Typeable)
 #endif
 import           Foreign.Ptr (castPtr)
 import           Foreign.Storable (Storable, alignment, peek, poke, sizeOf)
-#if MIN_VERSION_base(4, 4, 0)
-import           GHC.Generics
-                     ( D1
-                     , C1
-                     , Generic
-                     , K1 (K1)
-                     , M1 (M1)
-                     , Par1 (Par1)
-                     , Rec0
-                     , Rep
-                     , S1
-#if MIN_VERSION_base(4, 9, 0)
-                     , FixityI (PrefixI)
-                     , Meta (MetaCons, MetaData, MetaSel)
-                     , SourceUnpackedness (NoSourceUnpackedness)
-                     , SourceStrictness (SourceStrict)
-                     , DecidedStrictness (DecidedStrict)
-#else
-                     , Constructor
-                     , Datatype
-                     , NoSelector
-                     , conName
-                     , datatypeName
-                     , moduleName
-#endif
-                     , from
-                     , to
-                     )
-#endif
 import           Prelude hiding
                      (
 #if MIN_VERSION_base(4, 8, 0)
@@ -276,6 +248,28 @@ import           Control.DeepSeq (NFData, rnf)
 
 
 -- types ---------------------------------------------------------------------
+#if MIN_VERSION_base(4, 4, 0)
+import           GHC.Generics.Compat
+                     ( D1
+                     , C1
+                     , Generic
+                     , K1 (K1)
+                     , M1 (M1)
+                     , Par1 (Par1)
+                     , Rec0
+                     , Rep
+                     , S1
+                     , MetaCons
+                     , MetaData
+                     , MetaSel
+                     , NoSourceUnpackedness
+                     , PrefixI
+                     , SourceStrict
+                     , DecidedStrict
+                     , from
+                     , to
+                     )
+#endif
 import           GHC.TypeLits.Compat
                      ( KnownSymbol
 #ifdef DataPolyKinds
@@ -283,7 +277,15 @@ import           GHC.TypeLits.Compat
 #endif
                      , symbolVal
                      )
-import           Type.Meta (Proxy (Proxy))
+import           Type.Bool (False)
+import           Type.Maybe (Nothing)
+import           Type.Meta
+                     ( Proxy (Proxy)
+#ifndef UseTypeLits
+                     , Known
+                     , val
+#endif
+                     )
 import           Type.Tuple.Pair (Pair)
 
 
@@ -1079,27 +1081,25 @@ instance (KnownSymbol s, IsString a) => IsString (Field (Pair s a)) where
 
 #if MIN_VERSION_base(4, 4, 0)
 ------------------------------------------------------------------------------
-#if MIN_VERSION_base(4, 9, 0)
-type FieldMetaData = 'MetaData "Field" "Data.Field" "anonymous-data" 'False
-type FieldMetaCons = 'MetaCons "Field" 'PrefixI 'False
-type FieldMetaSel
-    = 'MetaSel 'Nothing 'NoSourceUnpackedness 'SourceStrict 'DecidedStrict
+#ifdef UseTypeLits
+type Field_ = "Field"
+type DataFieldField_ = "Data.Field.Field"
+type AnonymousData_ = "anonymous-data"
 #else
-data FieldMetaData
-data FieldMetaCons
-type FieldMetaSel = NoSelector
-
-
-------------------------------------------------------------------------------
-instance Datatype FieldMetaData where
-    datatypeName _ = "Field"
-    moduleName _ = "Data.Field"
-
-
-------------------------------------------------------------------------------
-instance Constructor FieldMetaCons where
-    conName _ = "Field"
+data Field_
+data DataFieldField_
+data AnonymousData_
+instance Known String Field_ where val _ = "Field"
+instance Known String DataFieldField_ where val _ = "Data.Field.Field"
+instance Known String AnonymousData_ where val _ = "anonymous-data"
 #endif
+
+
+------------------------------------------------------------------------------
+type FieldMetaData = MetaData Field_ DataFieldField_ AnonymousData_ False
+type FieldMetaCons = MetaCons Field_ PrefixI False
+type FieldMetaSel
+    = MetaSel Nothing NoSourceUnpackedness SourceStrict DecidedStrict
 
 
 ------------------------------------------------------------------------------
