@@ -1,12 +1,15 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 #include "kinds.h"
 
@@ -32,6 +35,7 @@ module Data.Field
     , field
     , (.=)
     , at
+    , Field1 (Field1)
     -- * Functor
     , (<$)
     , ($>)
@@ -131,7 +135,16 @@ import           Control.Applicative
                        (<|>)
                      , empty
                      )
+import qualified Control.Applicative (pure, (<*>))
+import           Control.Arrow ((***))
 import           Control.Monad (guard)
+import qualified Control.Monad ((>>=))
+import           Control.Monad.Fix (MonadFix)
+import qualified Control.Monad.Fix (mfix)
+#if MIN_VERSION_base(4, 4, 0)
+import           Control.Monad.Zip (MonadZip)
+import qualified Control.Monad.Zip (mzipWith, munzip)
+#endif
 import           Data.Bits
                      ( Bits
 #if MIN_VERSION_base(4, 7, 0)
@@ -181,6 +194,21 @@ import           Data.Foldable (Foldable)
 import qualified Data.Foldable as T (foldr)
 import           Data.Function (fix)
 import qualified Data.Functor as T ((<$), fmap)
+import           Data.Functor.Classes
+                     ( Eq1
+                     , Ord1
+                     , Read1
+                     , Show1
+                     , readsData
+                     , readsUnaryWith
+                     , showsUnaryWith
+                     )
+import qualified Data.Functor.Classes
+                     ( liftEq
+                     , liftCompare
+                     , liftReadsPrec
+                     , liftShowsPrec
+                     )
 import           Data.Ix (Ix, range, index, inRange)
 #if !MIN_VERSION_base(4, 8, 0)
 import           Data.Monoid (Monoid, mappend, mempty)
@@ -189,7 +217,10 @@ import           Data.Monoid (Monoid, mappend, mempty)
 import           Data.Semigroup (Semigroup, (<>))
 #endif
 import           Data.String (IsString, fromString)
-import qualified Data.Traversable as T ()
+#if !MIN_VERSION_base(4, 8, 0)
+import           Data.Traversable (Traversable)
+#endif
+import qualified Data.Traversable (traverse)
 #ifdef PolyTypeable
 import           Data.Typeable (Typeable)
 #endif
@@ -253,6 +284,7 @@ import           GHC.Generics.Compat
                      ( D1
                      , C1
                      , Generic
+                     , Generic1
                      , K1 (K1)
                      , M1 (M1)
                      , Par1 (Par1)
@@ -270,6 +302,7 @@ import           GHC.Generics.Compat
                      , to
                      )
 #endif
+import qualified GHC.Generics.Compat (Rep1, from1, to1)
 import           GHC.TypeLits.Compat
                      ( KnownSymbol
 #ifdef DataPolyKinds
@@ -277,7 +310,7 @@ import           GHC.TypeLits.Compat
 #endif
                      , symbolVal
                      )
-import           Type.Bool (False)
+import           Type.Bool (False, True)
 import           Type.Maybe (Nothing)
 import           Type.Meta
                      ( Proxy (Proxy)
@@ -1083,13 +1116,16 @@ instance (KnownSymbol s, IsString a) => IsString (Field (Pair s a)) where
 ------------------------------------------------------------------------------
 #ifdef UseTypeLits
 type Field_ = "Field"
+type Field1_ = "Field1"
 type DataFieldField_ = "Data.Field.Field"
 type AnonymousData_ = "anonymous-data"
 #else
 data Field_
+data Field1_
 data DataFieldField_
 data AnonymousData_
 instance Known String Field_ where val _ = "Field"
+instance Known String Field1_ where val _ = "Field1"
 instance Known String DataFieldField_ where val _ = "Data.Field.Field"
 instance Known String AnonymousData_ where val _ = "anonymous-data"
 #endif
@@ -1114,3 +1150,135 @@ instance KnownSymbol s => Generic (Field (Pair s a)) where
 ------------------------------------------------------------------------------
 instance NFData a => NFData (Field (Pair s a)) where
     rnf (Field a) = rnf a
+
+
+------------------------------------------------------------------------------
+-- | A newtype for all the so we can make instances of all the @* -> *@
+-- classes of which 'Field' is morally an instance.
+newtype Field1 s a = Field1 (Field (Pair s a))
+  deriving
+    ( Eq
+    , Ord
+    , Read
+    , Show
+    , Bounded
+    , Enum
+    , Ix
+#if MIN_VERSION_base(4, 9, 0)
+    , Semigroup
+#endif
+    , Monoid
+    , Storable
+    , Num
+    , Real
+    , Integral
+    , Fractional
+    , Floating
+    , RealFrac
+    , RealFloat
+    , Bits
+#if MIN_VERSION_base(4, 7, 0)
+    , FiniteBits
+#endif
+    , IsString
+#ifdef PolyTypeable
+    , Typeable
+#endif
+    )
+
+
+------------------------------------------------------------------------------
+type Field1MetaData = MetaData Field1_ DataFieldField_ AnonymousData_ True
+type Field1MetaCons = MetaCons Field1_ PrefixI False
+type Field1MetaSel
+    = MetaSel Nothing NoSourceUnpackedness SourceStrict DecidedStrict
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Generic (Field1 s a) where
+    type Rep (Field1 s a) = D1 Field1MetaData (C1 Field1MetaCons
+        (S1 Field1MetaSel (Rep (Field (Pair s a)))))
+    from (Field1 a) = M1 (M1 (M1 (from a)))
+    to (M1 (M1 (M1 a))) = Field1 (to a)
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Generic1 (Field1 s) where
+    type Rep1 (Field1 s) =
+        D1 Field1MetaData (C1 Field1MetaCons (S1 Field1MetaSel Rep1))
+    from1 (Field1 a) = M1 (M1 (M1 (from1 a)))
+    to1 (M1 (M1 (M1 a))) = Field1 (to1 a)
+
+
+------------------------------------------------------------------------------
+instance Eq1 (Field1 s) where
+    liftEq eq (Field1 a) (Field1 b) = liftEq eq a b
+    {-# INLINE liftEq #-}
+
+
+------------------------------------------------------------------------------
+instance Ord1 (Field1 s) where
+    liftCompare cmp (Field1 a) (Field1 b) = liftCompare cmp a b
+    {-# INLINE liftCompare #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Read1 (Field1 s) where
+    liftReadsPrec rdP rdL = readsData $
+        readsUnaryWith (liftReadsPrec rdP rdL) "Field1" Field1
+    {-# INLINE liftReadsPrec #-}
+
+
+------------------------------------------------------------------------------
+instance Show1 (Field1 s) where
+    liftShowsPrec shwP shwL p (Field1 a) =
+        showsUnaryWith (liftShowsPrec shwP shwL) "Field1" p a
+    {-# INLINE liftShowsPrec #-}
+
+
+------------------------------------------------------------------------------
+instance Functor (Field1 s) where
+    fmap f (Field1 a) = Field1 (fmap f a)
+    {-# INLINE fmap #-}
+
+
+------------------------------------------------------------------------------
+instance Foldable (Field1 s) where
+    foldr f b (Field1 a) = foldr f b a
+    {-# INLINE foldr #-}
+
+
+------------------------------------------------------------------------------
+instance Traversable (Field1 s) where
+    traverse f (Field1 a) = T.fmap Field1 (traverse f a)
+    {-# INLINE traverse #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Applicative (Field1 s) where
+    pure = Field1 . pure
+    {-# INLINE pure #-}
+    Field1 f <*> Field1 a = Field1 (f <*> a)
+    {-# INLINE (<*>) #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Monad (Field1 s) where
+    return = Field1 . pure
+    {-# INLINE return #-}
+    Field1 a >>= f = Field1 $ a >>= \a' -> let Field1 b = f a' in b
+    {-# INLINE (>>=) #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => MonadFix (Field1 s) where
+    mfix f = Field1 $ mfix (\a -> let Field1 b = f a in b)
+    {-# INLINE mfix #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => MonadZip (Field1 s) where
+    munzip (Field1 a) = Field1 *** Field1 $ munzip a
+    {-# INLINE munzip #-}
+    mzipWith f (Field1 a) (Field1 b) = Field1 (mzipWith f a b)
+    {-# INLINE mzipWith #-}
