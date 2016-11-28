@@ -235,12 +235,12 @@ import           GHC.Generics.Compat
                      , Rec0
                      , Rep
                      , PrefixI
-                     , DecidedLazy
+                     , DecidedStrict
                      , MetaCons
                      , MetaData
                      , MetaSel
                      , NoSourceUnpackedness
-                     , NoSourceStrictness
+                     , SourceStrict
                      , from
                      , to
                      )
@@ -250,16 +250,19 @@ import           GHC.TypeLits.Compat
                      , KnownSymbol
 #ifdef DataPolyKinds
                      , Nat
+#ifdef ClosedTypeFamilies
+                     , Symbol
+#endif
 #endif
                      , One
                      , Zero
                      )
 #ifdef GenericDeriving
-import           Type.Bool (False)
+import           Type.Bool (False, True)
 #endif
 import           Type.List (Cons, Nil)
 #ifdef GenericDeriving
-import           Type.Maybe (Nothing)
+import           Type.Maybe (Just, Nothing)
 #endif
 import           Type.Meta (Proxy (Proxy))
 #if __GLASGOW_HASKELL__ < 700
@@ -688,32 +691,343 @@ roundUpToNearestMultipleOf n m = n + m - mod n m
 
 #ifdef GenericDeriving
 ------------------------------------------------------------------------------
-type ProductMetaData =
+type MetaTupleSel =
+    MetaSel Nothing NoSourceUnpackedness SourceStrict DecidedStrict
+
+
+------------------------------------------------------------------------------
+type MetaRecordSel s =
+    MetaSel (Just s) NoSourceUnpackedness SourceStrict DecidedStrict
+
+
+------------------------------------------------------------------------------
+type family Selectors (f :: KPoly1 -> *) (as :: KList (KPoly1)) :: * -> *
+#ifdef ClosedTypeFamilies
+  where
+#endif
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors Identity Nil = U1
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors Identity (Cons a Nil) = S1 MetaTupleSel (Rec0 a)
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors Identity (Cons a (Cons a' as)) =
+        S1 MetaTupleSel (Rec0 a) :*: Selectors Identity (Cons a' as)
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors (Const b) Nil = U1
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors (Const b) (Cons a Nil) = S1 MetaTupleSel (Rec0 b)
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors (Const b) (Cons a (Cons a' as)) =
+        S1 MetaTupleSel (Rec0 b) :*: Selectors (Const b) (Cons a' as)
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors Field Nil = U1
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors Field (Cons (Pair s a) Nil) = S1 (MetaRecordSel s) (Rec0 a)
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors Field (Cons (Pair s a) (Cons a' as)) =
+        S1 (MetaRecordSel s) (Rec0 a) :*: Selectors Field (Cons a' as)
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors (Compose First Field) Nil = U1
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors (Compose First Field) (Cons (Pair s a) Nil) =
+        S1 (MetaRecordSel s) (Rec0 (Maybe a))
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Selectors (Compose First Field) (Cons (Pair s a) (Cons a' as)) =
+        S1 (MetaRecordSel s) (Rec0 (Maybe a)) :*:
+            Selectors (Compose First Field) (Cons a' as)
+#ifdef ClosedTypeFamilies
+    Selectors f Nil = U1
+    Selectors f (Cons (Pair s a) Nil) =
+        S1 (MetaRecordSel s) (Rec0 (f (Pair s a)))
+    Selectors f (Cons (Pair s a) (Cons a' as)) =
+        S1 (MetaRecordSel s) (Rec0 (f (Pair s a))) :*: Selectors f (Cons a' as)
+    Selectors f (Cons a Nil) = S1 MetaTupleSel (Rec0 (f a))
+    Selectors f (Cons a (Cons a' as)) =
+        S1 MetaTupleSel (Rec0 (f a)) :*: Selectors f (Cons a' as)
+#endif
+
+
+------------------------------------------------------------------------------
+type MetaTupleCons = MetaCons S.Empty_ PrefixI False
+
+
+------------------------------------------------------------------------------
+type MetaRecordCons = MetaCons S.Empty_ PrefixI True
+
+
+------------------------------------------------------------------------------
+type family Constructors (f :: KPoly1 -> *) :: (* -> *) -> * -> *
+#ifdef ClosedTypeFamilies
+  where
+#endif
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Constructors Identity = C1 MetaTupleCons
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Constructors (Const b) = C1 MetaTupleCons
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Constructors Field = C1 MetaRecordCons
+#ifndef ClosedTypeFamilies
+type instance
+#endif
+    Constructors (Compose First Field) = C1 MetaRecordCons
+#ifdef ClosedTypeFamilies
+    Constructors (f :: KPair (KString, KPoly2) -> *) = C1 MetaRecordCons
+    Constructors f = C1 MetaTupleCons
+#endif
+
+
+------------------------------------------------------------------------------
+type MetaProductData =
     MetaData S.Product S.DataAnonymousProduct S.AnonymousData False
-type ProductMetaConsNil = MetaCons S.Nil PrefixI False
-type ProductMetaConsCons = MetaCons S.Cons PrefixI False
-type ProductMetaSelCons0 =
-    MetaSel Nothing NoSourceUnpackedness NoSourceStrictness DecidedLazy
-type ProductMetaSelCons1 =
-    MetaSel Nothing NoSourceUnpackedness NoSourceStrictness DecidedLazy
 
 
 ------------------------------------------------------------------------------
-instance Generic (Product g Nil) where
-    type Rep (Product g Nil) = D1 ProductMetaData (C1 ProductMetaConsNil U1)
-    from Nil = M1 (M1 U1)
-    to (M1 (M1 U1)) = Nil
+type Data f as = D1 MetaProductData (Constructors f (Selectors f as))
 
 
 ------------------------------------------------------------------------------
-instance Generic (Product g (Cons a as)) where
-    type Rep (Product g (Cons a as)) = D1 ProductMetaData
-        (C1 ProductMetaConsCons ((:*:)
-            (S1 ProductMetaSelCons0 (Rec0 (g a)))
-            (S1 ProductMetaSelCons1 (Rec0 (Product g as)))))
+class SGeneric f as where
+    sto :: Selectors f as x -> Product f as
+    sfrom :: Product f as -> Selectors f as x
 
-    from (Cons a as) = M1 (M1 ((:*:) (M1 (K1 a)) (M1 (K1 as))))
-    to (M1 (M1 ((:*:) (M1 (K1 a)) (M1 (K1 as))))) = Cons a as
+
+------------------------------------------------------------------------------
+instance SGeneric Identity Nil where
+    sto U1 = Nil
+    sfrom Nil = U1
+
+
+------------------------------------------------------------------------------
+instance SGeneric Identity (Cons a Nil) where
+    sto (M1 (K1 a)) = Cons (Identity a) Nil
+    sfrom (Cons (Identity a) _) = M1 (K1 a)
+
+
+------------------------------------------------------------------------------
+instance (SGeneric Identity (Cons a' as)) =>
+    SGeneric Identity (Cons a (Cons a' as))
+  where
+    sto (M1 (K1 a) :*: as) = Cons (Identity a) (sto as)
+    sfrom (Cons (Identity a) as) = M1 (K1 a) :*: sfrom as
+
+
+------------------------------------------------------------------------------
+instance SGeneric (Const b) Nil where
+    sto U1 = Nil
+    sfrom Nil = U1
+
+
+------------------------------------------------------------------------------
+instance SGeneric (Const b) (Cons a Nil) where
+    sto (M1 (K1 a)) = Cons (Const a) Nil
+    sfrom (Cons (Const a) _) = M1 (K1 a)
+
+
+------------------------------------------------------------------------------
+instance (SGeneric (Const b) (Cons a' as)) =>
+    SGeneric (Const b) (Cons a (Cons a' as))
+  where
+    sto (M1 (K1 a) :*: as) = Cons (Const a) (sto as)
+    sfrom (Cons (Const a) as) = M1 (K1 a) :*: sfrom as
+
+
+------------------------------------------------------------------------------
+instance SGeneric Field Nil where
+    sto U1 = Nil
+    sfrom Nil = U1
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => SGeneric Field (Cons (Pair s a) Nil) where
+    sto (M1 (K1 a)) = Cons (Field a) Nil
+    sfrom (Cons (Field a) _) = M1 (K1 a)
+
+
+------------------------------------------------------------------------------
+instance (KnownSymbol s, SGeneric Field (Cons a' as)) =>
+    SGeneric Field (Cons (Pair s a) (Cons a' as))
+  where
+    sto (M1 (K1 a) :*: as) = Cons (Field a) (sto as)
+    sfrom (Cons (Field a) as) = M1 (K1 a) :*: sfrom as
+
+
+------------------------------------------------------------------------------
+instance SGeneric (Compose First Field) Nil where
+    sto U1 = Nil
+    sfrom Nil = U1
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => SGeneric (Compose First Field) (Cons (Pair s a) Nil)
+  where
+    sto (M1 (K1 a)) = Cons (Compose (First (fmap Field a))) Nil
+    sfrom (Cons (Compose (First (Just (Field a)))) _) = M1 (K1 (Just a))
+    sfrom (Cons (Compose (First Nothing)) _) = M1 (K1 Nothing)
+
+
+------------------------------------------------------------------------------
+instance (KnownSymbol s, SGeneric (Compose First Field) (Cons a' as)) =>
+    SGeneric (Compose First Field) (Cons (Pair s a) (Cons a' as))
+  where
+    sto (M1 (K1 a) :*: as) = Cons (Compose (First (fmap Field a))) (sto as)
+    sfrom (Cons (Compose (First (Just (Field a)))) as) =
+        M1 (K1 (Just a)) :*: sfrom as
+    sfrom (Cons (Compose (First Nothing)) as) = M1 (K1 Nothing) :*: sfrom as
+
+
+#ifdef ClosedTypeFamilies
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__ SGeneric f Nil where
+    sto U1 = Nil
+    sfrom Nil = U1
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__
+    ( Selectors f (Cons a Nil) ~ S1 MetaTupleSel (Rec0 (f a))
+    )
+  =>
+    SGeneric f (Cons a Nil)
+  where
+    sto (M1 (K1 a)) = Cons a Nil
+    sfrom (Cons a _) = M1 (K1 a)
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__
+    ( SGeneric f (Cons a' as)
+    , Selectors f (Cons a (Cons a' as))
+        ~ (S1 MetaTupleSel (Rec0 (f a)) :*: Selectors f (Cons a' as))
+    )
+  =>
+    SGeneric f (Cons a (Cons a' as))
+  where
+    sto (M1 (K1 a) :*: as) = Cons a (sto as)
+    sfrom (Cons a as) = M1 (K1 a) :*: sfrom as
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPS__
+    ( Selectors f (Cons (Pair s a) Nil) ~
+        S1 (MetaRecordSel s) (Rec0 (f (Pair s a)))
+    )
+  =>
+    SGeneric (f :: KPair (KString, KPoly1) -> *) (Cons (Pair s a) Nil)
+  where
+    sto (M1 (K1 a)) = Cons a Nil
+    sfrom (Cons a _) = M1 (K1 a)
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPS__
+    ( SGeneric f (Cons a' as)
+    , Selectors f (Cons (Pair s a) (Cons a' as)) ~
+        (S1 (MetaRecordSel s) (Rec0 (f (Pair s a))) :*:
+            Selectors f (Cons a' as))
+    )
+  =>
+    SGeneric
+        (f :: KPair (KString, KPoly1) -> *)
+        (Cons (Pair s a) (Cons a' as))
+  where
+    sto (M1 (K1 a) :*: as) = Cons a (sto as)
+    sfrom (Cons a as) = M1 (K1 a) :*: sfrom as
+
+
+#endif
+------------------------------------------------------------------------------
+class SGeneric f as => CGeneric f as where
+    cto :: Constructors f (Selectors f as) x -> Product f as
+    cfrom :: Product f as -> Constructors f (Selectors f as) x
+
+
+------------------------------------------------------------------------------
+instance SGeneric Identity as => CGeneric Identity as where
+    cto (M1 a) = sto a
+    cfrom a = M1 (sfrom a)
+
+
+------------------------------------------------------------------------------
+instance SGeneric (Const b) as => CGeneric (Const b) as where
+    cto (M1 a) = sto a
+    cfrom a = M1 (sfrom a)
+
+
+------------------------------------------------------------------------------
+instance SGeneric Field as => CGeneric Field as where
+    cto (M1 a) = sto a
+    cfrom a = M1 (sfrom a)
+
+
+------------------------------------------------------------------------------
+instance SGeneric (Compose First Field) as =>
+    CGeneric (Compose First Field) as
+  where
+    cto (M1 a) = sto a
+    cfrom a = M1 (sfrom a)
+
+
+#ifdef ClosedTypeFamilies
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__
+    ( SGeneric f as
+    , Constructors f ~ C1 MetaTupleCons
+    )
+  =>
+    CGeneric f as
+  where
+    cto (M1 a) = sto a
+    cfrom a = M1 (sfrom a)
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__
+    ( SGeneric f as
+    , Constructors f ~ C1 MetaRecordCons
+    )
+  =>
+    CGeneric (f :: KPair (KString, KPoly1) -> *) as
+  where
+    cto (M1 a) = sto a
+    cfrom a = M1 (sfrom a)
+
+
+#endif
+------------------------------------------------------------------------------
+instance CGeneric f as => Generic (Product f as) where
+    type Rep (Product f as) = Data f as
+    to (M1 a) = cto a
+    from = M1 . cfrom
 
 
 #endif
