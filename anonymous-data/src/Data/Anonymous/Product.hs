@@ -46,6 +46,7 @@ module Data.Anonymous.Product
     , Tuple
     , Record
     , Options
+
     , (<::>)
     , (<:>)
     , (<:.>)
@@ -58,7 +59,13 @@ module Data.Anonymous.Product
     , pattern (:<:?>)
 #endif
 #endif
+
     , (:<++>) ((<++>))
+
+    , fromOptions
+    , FromOptionsNoDefaults
+    , fromOptionsNoDefaults
+
     , LookupIndex'
 #ifdef ClosedTypeFamilies
     , LookupIndex
@@ -256,6 +263,7 @@ import           GHC.TypeLits.Compat
 #endif
                      , One
                      , Zero
+                     , symbolVal
                      )
 #ifdef GenericDeriving
 import           Type.Bool (False, True)
@@ -1144,6 +1152,37 @@ instance (as :<++> bs, (Cons a as :<> bs) ~ (Cons a (as :<> bs))) =>
     (:<++>) (Cons a as) bs
   where
     Cons a as <++> bs = Cons a (as <++> bs)
+
+
+------------------------------------------------------------------------------
+fromOptions :: Options as -> Record as -> Record as
+fromOptions Nil Nil = Nil
+fromOptions (Cons (Compose (First a)) as) (Cons b bs) =
+    Cons (maybe b id a) (fromOptions as bs)
+#if __GLASGOW_HASKELL__ < 800
+fromOptions _ _ = undefined
+#endif
+
+
+------------------------------------------------------------------------------
+class FromOptionsNoDefaults as where
+    fromOptionsNoDefaults :: Options as -> Record as
+
+
+------------------------------------------------------------------------------
+instance FromOptionsNoDefaults Nil where
+    fromOptionsNoDefaults Nil = Nil
+
+
+------------------------------------------------------------------------------
+instance (KnownSymbol s, FromOptionsNoDefaults as) =>
+    FromOptionsNoDefaults (Cons (Pair s a) as)
+  where
+    fromOptionsNoDefaults (Cons (Compose (First (Just a))) as) =
+        Cons a (fromOptionsNoDefaults as)
+    fromOptionsNoDefaults (Cons (Compose (First Nothing)) _) =
+        error $ "Cannot get record from options: option " ++
+            show (symbolVal (Proxy :: Proxy s)) ++ " is missing!"
 
 
 ------------------------------------------------------------------------------

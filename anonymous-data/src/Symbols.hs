@@ -47,7 +47,7 @@ infixr 5 :+
 
 
 ------------------------------------------------------------------------------
-type Empty_ = Nil
+type Empty_ = String Nil
 type AnonymousData = String (-- $("anonymous-data")
     Char I O O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
