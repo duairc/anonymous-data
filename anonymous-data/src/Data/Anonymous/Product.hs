@@ -65,7 +65,6 @@ module Data.Anonymous.Product
     , (:<++>) ((<++>))
 
     , fromOptions
-    , FromOptionsNoDefaults
     , fromOptionsNoDefaults
 
     , LookupIndex'
@@ -1518,25 +1517,20 @@ fromOptions _ _ = undefined
 
 
 ------------------------------------------------------------------------------
-class FromOptionsNoDefaults as where
-    fromOptionsNoDefaults :: Options as -> Record as
-
-
-------------------------------------------------------------------------------
-instance FromOptionsNoDefaults Nil where
-    fromOptionsNoDefaults Nil = Nil
-
-
-------------------------------------------------------------------------------
-instance FromOptionsNoDefaults as =>
-    FromOptionsNoDefaults (Cons (Pair s a) as)
+fromOptionsNoDefaults :: Options as -> Record as
+fromOptionsNoDefaults Nil = Nil
+fromOptionsNoDefaults (Cons o@(Option (Just a)) as) =
+    Cons (fieldFromOption o a) (fromOptionsNoDefaults as)
   where
-    fromOptionsNoDefaults (Cons (Option (Just a)) as) =
-        Cons (Field a) (fromOptionsNoDefaults as)
-    fromOptionsNoDefaults (Cons (Option Nothing) _) =
-        error $ "Cannot get record from options: option "
-            ++ show (symbolVal (Proxy :: Proxy s))
-            ++ " is missing!"
+    fieldFromOption :: forall s a. Option (Pair s a) -> a -> Field (Pair s a)
+    fieldFromOption (Option _) b = Field b
+fromOptionsNoDefaults (Cons o@(Option Nothing) _) =
+    error $ "Cannot get record from options: option "
+        ++ symbol o
+        ++ " is missing!"
+  where
+    symbol :: forall s a. Option (Pair s a) -> String
+    symbol (Option _) = symbolVal (Proxy :: Proxy s)
 
 
 ------------------------------------------------------------------------------
