@@ -837,6 +837,9 @@ instance Num (f a) => Num (Product f (Cons a Nil)) where
 ------------------------------------------------------------------------------
 instance Real (f a) => Real (Product f (Cons a Nil)) where
     toRational (Cons a Nil) = toRational a
+#if __GLASGOW_HASKELL__ < 800
+    toRational _ = undefined
+#endif
 
 
 ------------------------------------------------------------------------------
@@ -848,10 +851,19 @@ instance Integral (f a) => Integral (Product f (Cons a Nil)) where
     quotRem (Cons a Nil) (Cons b Nil) = (Cons a' Nil, Cons b' Nil)
       where
         (a', b') = quotRem a b
+#if __GLASGOW_HASKELL__ < 800
+    quotRem _ _ = undefined
+#endif
     divMod (Cons a Nil) (Cons b Nil) = (Cons a' Nil, Cons b' Nil)
       where
         (a', b') = divMod a b
+#if __GLASGOW_HASKELL__ < 800
+    divMod _ _ = undefined
+#endif
     toInteger (Cons a Nil) = toInteger a
+#if __GLASGOW_HASKELL__ < 800
+    toInteger _ = undefined
+#endif
 
 
 ------------------------------------------------------------------------------
@@ -888,27 +900,72 @@ instance RealFrac (f a) => RealFrac (Product f (Cons a Nil)) where
     properFraction (Cons x Nil) = (a, Cons b Nil)
       where
         (a, b) = properFraction x
+#if __GLASGOW_HASKELL__ < 800
+    properFraction _ = undefined
+#endif
     truncate (Cons a Nil) = truncate a
+#if __GLASGOW_HASKELL__ < 800
+    truncate _ = undefined
+#endif
     round (Cons a Nil) = round a
+#if __GLASGOW_HASKELL__ < 800
+    round _ = undefined
+#endif
     ceiling (Cons a Nil) = ceiling a
+#if __GLASGOW_HASKELL__ < 800
+    ceiling _ = undefined
+#endif
     floor (Cons a Nil) = floor a
+#if __GLASGOW_HASKELL__ < 800
+    floor _ = undefined
+#endif
 
 
 ------------------------------------------------------------------------------
 instance RealFloat (f a) => RealFloat (Product f (Cons a Nil)) where
     floatRadix (Cons a Nil) = floatRadix a
+#if __GLASGOW_HASKELL__ < 800
+    floatRadix _ = undefined
+#endif
     floatDigits (Cons a Nil) = floatDigits a
+#if __GLASGOW_HASKELL__ < 800
+    floatDigits _ = undefined
+#endif
     floatRange (Cons a Nil) = floatRange a
+#if __GLASGOW_HASKELL__ < 800
+    floatRange _ = undefined
+#endif
     decodeFloat (Cons a Nil) = decodeFloat a
+#if __GLASGOW_HASKELL__ < 800
+    decodeFloat _ = undefined
+#endif
     encodeFloat m n = Cons (encodeFloat m n) Nil
     exponent (Cons a Nil) = exponent a
+#if __GLASGOW_HASKELL__ < 800
+    exponent _ = undefined
+#endif
     significand = lift significand
     scaleFloat n = lift (scaleFloat n)
     isNaN (Cons a Nil) = isNaN a
+#if __GLASGOW_HASKELL__ < 800
+    isNaN _ = undefined
+#endif
     isInfinite (Cons a Nil) = isInfinite a
+#if __GLASGOW_HASKELL__ < 800
+    isInfinite _ = undefined
+#endif
     isDenormalized (Cons a Nil) = isDenormalized a
+#if __GLASGOW_HASKELL__ < 800
+    isDenormalized _ = undefined
+#endif
     isNegativeZero (Cons a Nil) = isNegativeZero a
+#if __GLASGOW_HASKELL__ < 800
+    isNegativeZero _ = undefined
+#endif
     isIEEE (Cons a Nil) = isIEEE a
+#if __GLASGOW_HASKELL__ < 800
+    isIEEE _ = undefined
+#endif
     atan2 = lift2 atan2
 
 
@@ -929,24 +986,48 @@ instance Bits (f a) => Bits (Product f (Cons a Nil)) where
     clearBit a i = lift (flip clearBit i) a
     complementBit a i = lift (flip complementBit i) a
     testBit (Cons a Nil) i = testBit a i
+#if __GLASGOW_HASKELL__ < 800
+    testBit _ _ = undefined
+#endif
     isSigned (Cons a Nil) = isSigned a
+#if __GLASGOW_HASKELL__ < 800
+    isSigned _ = undefined
+#endif
     bitSize (Cons a Nil) = bitSize a
+#if __GLASGOW_HASKELL__ < 800
+    bitSize _ = undefined
+#endif
 #if MIN_VERSION_base(4, 5, 0)
     unsafeShiftL a i = lift (flip unsafeShiftL i) a
     unsafeShiftR a i = lift (flip unsafeShiftR i) a
     popCount (Cons a Nil) = popCount a
+#if __GLASGOW_HASKELL__ < 800
+    popCount _ = undefined
+#endif
 #endif
 #if MIN_VERSION_base(4, 7, 0)
     bitSizeMaybe (Cons a Nil) = bitSizeMaybe a
+#if __GLASGOW_HASKELL__ < 800
+    bitSizeMaybe _ = undefined
+#endif
     zeroBits = Cons zeroBits Nil
 
 
 ------------------------------------------------------------------------------
 instance FiniteBits (f a) => FiniteBits (Product f (Cons a Nil)) where
     finiteBitSize (Cons a Nil) = finiteBitSize a
+#if __GLASGOW_HASKELL__ < 800
+    finiteBitSize _ = undefined
+#endif
 #if MIN_VERSION_base(4, 8, 0)
     countLeadingZeros (Cons a Nil) = countLeadingZeros a
+#if __GLASGOW_HASKELL__ < 800
+    countLeadingZeros _ = undefined
+#endif
     countTrailingZeros (Cons a Nil) = countTrailingZeros a
+#if __GLASGOW_HASKELL__ < 800
+    countTrailingZeros _ = undefined
+#endif
 #endif
 #endif
 
@@ -959,6 +1040,9 @@ instance IsString (f a) => IsString (Product f (Cons a Nil)) where
 ------------------------------------------------------------------------------
 lift :: (f a -> f b) -> Product f (Cons a Nil) -> Product f (Cons b Nil)
 lift f (Cons a Nil) = Cons (f a) Nil
+#if __GLASGOW_HASKELL__ < 800
+lift _ _ = undefined
+#endif
 {-# INLINE lift #-}
 
 
@@ -969,6 +1053,9 @@ lift2
     -> Product f (Cons b Nil)
     -> Product f (Cons c Nil)
 lift2 f (Cons a Nil) (Cons b Nil) = Cons (f a b) Nil
+#if __GLASGOW_HASKELL__ < 800
+lift2 _ _ _ = undefined
+#endif
 {-# INLINE lift2 #-}
 
 
