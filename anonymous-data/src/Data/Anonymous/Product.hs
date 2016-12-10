@@ -16,7 +16,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 #include "kinds.h"
-#include "incoherent.h"
 #include "overlap.h"
 
 #ifdef UseAmbiguousTypes
@@ -194,7 +193,7 @@ import qualified Type.List.Fields as T
 
 -- base ----------------------------------------------------------------------
 import           Control.Applicative (Const (Const))
-import           Control.Monad (msum)
+import           Control.Monad (guard, msum)
 import           Data.Functor.Compose (Compose (Compose))
 import           Data.Functor.Identity (Identity (Identity))
 import           Data.Ix
@@ -358,6 +357,24 @@ instance (ReadHelper Field as, PlainRead Field as) =>
 
 
 ------------------------------------------------------------------------------
+instance
+    ( ReadHelper (Compose First Field) as
+    , PlainRead (Compose First Field) as
+    )
+  =>
+    Read (Options as)
+  where
+    readsPrec _ s = msum
+        [ do
+            ("{", s') <- lex s
+            (as, s'') <- readsHelper s'
+            ("}", s''') <- lex s''
+            return (as, s''')
+        , plainReads s
+        ]
+
+
+------------------------------------------------------------------------------
 class PlainRead g as where
     plainReads :: ReadS (Product g as)
 
@@ -453,6 +470,75 @@ instance __OVERLAPPABLE__ (I.Read b, ReadHelper (Const b) as) =>
 
 
 ------------------------------------------------------------------------------
+instance (I.Read a, KnownSymbol s) =>
+    ReadHelper Field (Cons (Pair s a) Nil)
+  where
+    readsHelper s = do
+        (a, s') <- readsField s
+        return (Cons a Nil, s')
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__ (I.Read a, KnownSymbol s, ReadHelper Field as) =>
+    ReadHelper Field (Cons (Pair s a) as)
+  where
+    readsHelper s = do
+        (a, s') <- readsField s
+        (",", s'') <- lex s'
+        (as, s''') <- readsHelper s''
+        return (Cons a as, s''')
+
+
+------------------------------------------------------------------------------
+instance (I.Read a, KnownSymbol s) =>
+    ReadHelper (Compose First Field) (Cons (Pair s a) Nil)
+  where
+    readsHelper s = do
+        (a, s') <- readsOption (return . (,) ()) s
+        return (Cons a Nil, s')
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__
+    (I.Read a, KnownSymbol s, ReadHelper (Compose First Field) as)
+  =>
+    ReadHelper (Compose First Field) (Cons (Pair s a) as)
+  where
+    readsHelper s = do
+        (a, s') <- readsOption comma s
+        (as, s'') <- readsHelper s'
+        return (Cons a as, s'')
+      where
+        comma s' = do
+            (",", s'') <- lex s'
+            return ((), s'')
+
+
+------------------------------------------------------------------------------
+readsField :: forall a s. (I.Read a, KnownSymbol s)
+    => ReadS (Field (Pair s a))
+readsField s = do
+    (label, s') <- lex s
+    guard $ label == symbolVal (Proxy :: Proxy s)
+    ("=", s'') <- lex s'
+    (a, s''') <- I.readsPrec 0 s''
+    return $ (Field a, s''')
+
+
+------------------------------------------------------------------------------
+readsOption :: (I.Read a, KnownSymbol s)
+    => ReadS b
+    -> ReadS (Compose First Field (Pair s a))
+readsOption f s = msum
+    [ do
+        (a, s') <- readsField s
+        (_, s'') <- f s'
+        return (Compose $ First $ Just a, s'')
+    , return (Compose (First Nothing), s)
+    ]
+
+
+------------------------------------------------------------------------------
 instance __INCOHERENT__ ShowHelper g as => Show (Product g as) where
     showsPrec _ as = foldr (.) id $
         [ showString "<"
@@ -481,6 +567,15 @@ instance ShowHelper (Const b) as => Show (Product (Const b) as) where
 
 ------------------------------------------------------------------------------
 instance ShowHelper Field as => Show (Record as) where
+    showsPrec _ as = foldr (.) id $
+        [ showString "{"
+        , showsHelper as
+        , showString "}"
+        ]
+
+
+------------------------------------------------------------------------------
+instance ShowHelper (Compose First Field) as => Show (Options as) where
     showsPrec _ as = foldr (.) id $
         [ showString "{"
         , showsHelper as
@@ -533,6 +628,44 @@ instance (I.Show b, ShowHelper (Const b) as) =>
         , showString ", "
         , showsHelper as
         ]
+
+
+------------------------------------------------------------------------------
+instance (I.Show a, ShowHelper Field as) =>
+    ShowHelper Field (Cons (Pair s a) as)
+  where
+    showsHelper (Cons a Nil) = showsField a
+    showsHelper (Cons a as) = foldr (.) id $
+        [ showsField a
+        , showString ", "
+        , showsHelper as
+        ]
+
+
+------------------------------------------------------------------------------
+instance (I.Show a, ShowHelper (Compose First Field) as) =>
+    ShowHelper (Compose First Field) (Cons (Pair s a) as)
+  where
+    showsHelper (Cons a Nil) = showsOption a id
+    showsHelper (Cons a as) = showsOption a (showString ", ") . showsHelper as
+
+
+------------------------------------------------------------------------------
+showsField :: forall a s. I.Show a => Field (Pair s a) -> ShowS
+showsField (Field a) = foldr (.) id $
+    [ showString $ symbolVal (Proxy :: Proxy s)
+    , showString " = "
+    , I.showsPrec 0 a
+    ]
+
+
+------------------------------------------------------------------------------
+showsOption :: forall a s. I.Show a
+    => Compose First Field (Pair s a)
+    -> ShowS
+    -> ShowS
+showsOption (Compose (First (Just a))) f = showsField a . f
+showsOption (Compose (First Nothing)) _ = id
 
 
 ------------------------------------------------------------------------------
