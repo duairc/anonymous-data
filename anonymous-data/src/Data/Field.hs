@@ -50,19 +50,11 @@ import qualified Symbols as S
 
 #endif
 -- base ----------------------------------------------------------------------
+#if !MIN_VERSION_base(4, 8, 0)
+import           Control.Applicative (Applicative, (<*>), pure)
+#endif
 #if MIN_VERSION_base(4, 4, 0)
-import           Control.Applicative
-                     (
-#if !MIN_VERSION_base(4, 8, 0)
-                       Applicative
-                     , (<*>)
-                     ,
-#endif
-                       liftA2
-#if !MIN_VERSION_base(4, 8, 0)
-                     , pure
-#endif
-                     )
+import           Control.Applicative (liftA2)
 #endif
 import           Control.Monad (guard)
 import           Control.Monad.Fix (MonadFix, mfix)
