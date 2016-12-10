@@ -40,6 +40,10 @@
 {-# LANGUAGE Trustworthy #-}
 #endif
 
+#if MIN_VERSION_base(4, 7, 0)
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
+#endif
+
 module Data.Anonymous.Product
     ( Product (Cons, Nil)
     , Tuple
@@ -191,6 +195,49 @@ import qualified Type.List.Fields as T
 -- base ----------------------------------------------------------------------
 import           Control.Applicative (Const (Const))
 import           Control.Monad (guard, msum)
+import           Data.Bits
+                     ( Bits
+#if MIN_VERSION_base(4, 7, 0)
+                     , FiniteBits
+#endif
+                     , (.&.)
+                     , (.|.)
+                     , bit
+                     , bitSize
+#if MIN_VERSION_base(4, 7, 0)
+                     , bitSizeMaybe
+#endif
+                     , clearBit
+                     , complement
+                     , complementBit
+#if MIN_VERSION_base(4, 8, 0)
+                     , countLeadingZeros
+                     , countTrailingZeros
+#endif
+#if MIN_VERSION_base(4, 7, 0)
+                     , finiteBitSize
+#endif
+                     , isSigned
+#if MIN_VERSION_base(4, 5, 0)
+                     , popCount
+#endif
+                     , rotate
+                     , rotateL
+                     , rotateR
+                     , setBit
+                     , shift
+                     , shiftL
+                     , shiftR
+                     , testBit
+#if MIN_VERSION_base(4, 5, 0)
+                     , unsafeShiftL
+                     , unsafeShiftR
+#endif
+                     , xor
+#if MIN_VERSION_base(4, 7, 0)
+                     , zeroBits
+#endif
+                     )
 import           Data.Functor.Identity (Identity (Identity))
 import           Data.Ix (Ix, inRange, range)
 import qualified Data.Ix (index)
@@ -200,6 +247,7 @@ import           Data.Monoid (Monoid, mappend, mempty)
 #if MIN_VERSION_base(4, 9, 0)
 import           Data.Semigroup (Semigroup, (<>))
 #endif
+import           Data.String (IsString, fromString)
 #ifdef PolyTypeable
 import           Data.Typeable (Typeable)
 #endif
@@ -773,6 +821,155 @@ instance (Storable (g a), Storable (Product g as)) =>
 ------------------------------------------------------------------------------
 roundUpToNearestMultipleOf :: Integral a => a -> a -> a
 roundUpToNearestMultipleOf n m = n + m - mod n m
+
+
+------------------------------------------------------------------------------
+instance Num (f a) => Num (Product f (Cons a Nil)) where
+    (+) = lift2 (+)
+    (-) = lift2 (-)
+    (*) = lift2 (*)
+    negate = lift negate
+    abs = lift abs
+    signum = lift signum
+    fromInteger n = Cons (fromInteger n) Nil
+
+
+------------------------------------------------------------------------------
+instance Real (f a) => Real (Product f (Cons a Nil)) where
+    toRational (Cons a Nil) = toRational a
+
+
+------------------------------------------------------------------------------
+instance Integral (f a) => Integral (Product f (Cons a Nil)) where
+    quot = lift2 quot
+    rem = lift2 rem
+    div = lift2 div
+    mod = lift2 mod
+    quotRem (Cons a Nil) (Cons b Nil) = (Cons a' Nil, Cons b' Nil)
+      where
+        (a', b') = quotRem a b
+    divMod (Cons a Nil) (Cons b Nil) = (Cons a' Nil, Cons b' Nil)
+      where
+        (a', b') = divMod a b
+    toInteger (Cons a Nil) = toInteger a
+
+
+------------------------------------------------------------------------------
+instance Fractional (f a) => Fractional (Product f (Cons a Nil)) where
+    (/) = lift2 (/)
+    recip = lift recip
+    fromRational n = Cons (fromRational n) Nil
+
+
+------------------------------------------------------------------------------
+instance Floating (f a) => Floating (Product f (Cons a Nil)) where
+    pi = Cons pi Nil
+    exp = lift exp
+    log = lift log
+    sqrt = lift sqrt
+    sin = lift sin
+    cos = lift cos
+    tan = lift tan
+    asin = lift asin
+    acos = lift acos
+    atan = lift atan
+    sinh = lift sinh
+    cosh = lift cosh
+    tanh = lift tanh
+    asinh = lift asinh
+    acosh = lift acosh
+    atanh = lift atanh
+    (**) = lift2 (**)
+    logBase = lift2 (**)
+
+
+------------------------------------------------------------------------------
+instance RealFrac (f a) => RealFrac (Product f (Cons a Nil)) where
+    properFraction (Cons x Nil) = (a, Cons b Nil)
+      where
+        (a, b) = properFraction x
+    truncate (Cons a Nil) = truncate a
+    round (Cons a Nil) = round a
+    ceiling (Cons a Nil) = ceiling a
+    floor (Cons a Nil) = floor a
+
+
+------------------------------------------------------------------------------
+instance RealFloat (f a) => RealFloat (Product f (Cons a Nil)) where
+    floatRadix (Cons a Nil) = floatRadix a
+    floatDigits (Cons a Nil) = floatDigits a
+    floatRange (Cons a Nil) = floatRange a
+    decodeFloat (Cons a Nil) = decodeFloat a
+    encodeFloat m n = Cons (encodeFloat m n) Nil
+    exponent (Cons a Nil) = exponent a
+    significand = lift significand
+    scaleFloat n = lift (scaleFloat n)
+    isNaN (Cons a Nil) = isNaN a
+    isInfinite (Cons a Nil) = isInfinite a
+    isDenormalized (Cons a Nil) = isDenormalized a
+    isNegativeZero (Cons a Nil) = isNegativeZero a
+    isIEEE (Cons a Nil) = isIEEE a
+    atan2 = lift2 atan2
+
+
+------------------------------------------------------------------------------
+instance Bits (f a) => Bits (Product f (Cons a Nil)) where
+    (.&.) = lift2 (.&.)
+    (.|.) = lift2 (.|.)
+    xor = lift2 xor
+    complement = lift complement
+    shift a i = lift (flip shift i) a
+    shiftL a i = lift (flip shiftL i) a
+    shiftR a i = lift (flip shiftR i) a
+    rotate a i = lift (flip shift i) a
+    rotateL a i = lift (flip rotateL i) a
+    rotateR a i = lift (flip rotateR i) a
+    bit i = Cons (bit i) Nil
+    setBit a i = lift (flip setBit i) a
+    clearBit a i = lift (flip clearBit i) a
+    complementBit a i = lift (flip complementBit i) a
+    testBit (Cons a Nil) i = testBit a i
+    isSigned (Cons a Nil) = isSigned a
+    bitSize (Cons a Nil) = bitSize a
+#if MIN_VERSION_base(4, 5, 0)
+    unsafeShiftL a i = lift (flip unsafeShiftL i) a
+    unsafeShiftR a i = lift (flip unsafeShiftR i) a
+    popCount (Cons a Nil) = popCount a
+#endif
+#if MIN_VERSION_base(4, 7, 0)
+    bitSizeMaybe (Cons a Nil) = bitSizeMaybe a
+    zeroBits = Cons zeroBits Nil
+
+
+------------------------------------------------------------------------------
+instance FiniteBits (f a) => FiniteBits (Product f (Cons a Nil)) where
+    finiteBitSize (Cons a Nil) = finiteBitSize a
+#if MIN_VERSION_base(4, 8, 0)
+    countLeadingZeros (Cons a Nil) = countLeadingZeros a
+    countTrailingZeros (Cons a Nil) = countTrailingZeros a
+#endif
+#endif
+
+
+------------------------------------------------------------------------------
+instance IsString (f a) => IsString (Product f (Cons a Nil)) where
+    fromString s = Cons (fromString s) Nil
+
+
+------------------------------------------------------------------------------
+lift :: (f a -> f b) -> Product f (Cons a Nil) -> Product f (Cons b Nil)
+lift f (Cons a Nil) = Cons (f a) Nil
+{-# INLINE lift #-}
+
+
+------------------------------------------------------------------------------
+lift2
+    :: (f a -> f b -> f c)
+    -> Product f (Cons a Nil)
+    -> Product f (Cons b Nil)
+    -> Product f (Cons c Nil)
+lift2 f (Cons a Nil) (Cons b Nil) = Cons (f a b) Nil
+{-# INLINE lift2 #-}
 
 
 #ifdef GenericDeriving
