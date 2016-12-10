@@ -1269,8 +1269,11 @@ instance (KnownSymbol s, FromOptionsNoDefaults as) =>
     fromOptionsNoDefaults (Cons (Compose (First (Just a))) as) =
         Cons a (fromOptionsNoDefaults as)
     fromOptionsNoDefaults (Cons (Compose (First Nothing)) _) =
-        error $ "Cannot get record from options: option " ++
-            show (symbolVal (Proxy :: Proxy s)) ++ " is missing!"
+        error $ "Cannot get record from options: option "
+#if __GLASGOW_HASKELL__ >= 700
+            ++ show (symbolVal (Proxy :: Proxy s))
+#endif
+            ++ " is missing!"
 
 
 ------------------------------------------------------------------------------
