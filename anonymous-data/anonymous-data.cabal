@@ -31,7 +31,6 @@ library
     Data.Field
 
   other-modules:
-    Data.Classes
     Symbols
 
   build-depends:
