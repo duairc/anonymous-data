@@ -54,9 +54,7 @@ module Data.Anonymous.Product
     , pattern (:<::>)
     , pattern (:<:>)
     , pattern (:<:.>)
-#if __GLASGOW_HASKELL__ >= 800
     , pattern (:<:?>)
-#endif
 #endif
 
     , (:<++>) ((<++>))
@@ -181,7 +179,7 @@ module Data.Anonymous.Product
 where
 
 -- anonymous-data ------------------------------------------------------------
-import           Data.Field (Field (Field))
+import           Data.Field (Field (Field), Option (Option))
 #ifdef GenericDeriving
 import qualified Symbols as S
 #endif
@@ -193,18 +191,12 @@ import qualified Type.List.Fields as T
 -- base ----------------------------------------------------------------------
 import           Control.Applicative (Const (Const))
 import           Control.Monad (guard, msum)
-import           Data.Functor.Compose (Compose (Compose))
 import           Data.Functor.Identity (Identity (Identity))
 import           Data.Ix (Ix, inRange, range)
 import qualified Data.Ix (index)
-import           Data.Monoid
-                     ( First (First)
 #if !MIN_VERSION_base(4, 8, 0)
-                     , Monoid
-                     , mappend
-                     , mempty
+import           Data.Monoid (Monoid, mappend, mempty)
 #endif
-                     )
 #if MIN_VERSION_base(4, 9, 0)
 import           Data.Semigroup (Semigroup, (<>))
 #endif
@@ -335,9 +327,7 @@ instance (ReadHelper (Const b) as, PlainRead (Const b) as) =>
 
 
 ------------------------------------------------------------------------------
-instance (ReadHelper Field as, PlainRead Field as) =>
-    Read (Record as)
-  where
+instance (ReadHelper Field as, PlainRead Field as) => Read (Record as) where
     readsPrec _ s = msum
         [ do
             ("{", s') <- lex s
@@ -349,12 +339,7 @@ instance (ReadHelper Field as, PlainRead Field as) =>
 
 
 ------------------------------------------------------------------------------
-instance
-    ( ReadHelper (Compose First Field) as
-    , PlainRead (Compose First Field) as
-    )
-  =>
-    Read (Options as)
+instance (ReadHelper Option as, PlainRead Option as) => Read (Options as)
   where
     readsPrec _ s = msum
         [ do
@@ -482,8 +467,7 @@ instance __OVERLAPPABLE__ (Read a, KnownSymbol s, ReadHelper Field as) =>
 
 
 ------------------------------------------------------------------------------
-instance (Read a, KnownSymbol s) =>
-    ReadHelper (Compose First Field) (Cons (Pair s a) Nil)
+instance (Read a, KnownSymbol s) => ReadHelper Option (Cons (Pair s a) Nil)
   where
     readsHelper s = do
         (a, s') <- readsOption (return . (,) ()) s
@@ -491,10 +475,8 @@ instance (Read a, KnownSymbol s) =>
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__
-    (Read a, KnownSymbol s, ReadHelper (Compose First Field) as)
-  =>
-    ReadHelper (Compose First Field) (Cons (Pair s a) as)
+instance __OVERLAPPABLE__ (Read a, KnownSymbol s, ReadHelper Option as) =>
+    ReadHelper Option (Cons (Pair s a) as)
   where
     readsHelper s = do
         (a, s') <- readsOption comma s
@@ -518,15 +500,18 @@ readsField s = do
 
 
 ------------------------------------------------------------------------------
-readsOption :: (Read a, KnownSymbol s)
+readsOption :: forall a b s. (Read a, KnownSymbol s)
     => ReadS b
-    -> ReadS (Compose First Field (Pair s a))
+    -> ReadS (Option (Pair s a))
 readsOption f s = msum
     [ do
-        (a, s') <- readsField s
-        (_, s'') <- f s'
-        return (Compose $ First $ Just a, s'')
-    , return (Compose (First Nothing), s)
+        (label, s') <- lex s
+        guard $ label == symbolVal (Proxy :: Proxy s)
+        ("=", s'') <- lex s'
+        (a, s''') <- readsPrec 0 s''
+        (_, s'''') <- f s'''
+        return (Option (Just a), s'''')
+    , return (Option Nothing, s)
     ]
 
 
@@ -567,7 +552,7 @@ instance ShowHelper Field as => Show (Record as) where
 
 
 ------------------------------------------------------------------------------
-instance ShowHelper (Compose First Field) as => Show (Options as) where
+instance ShowHelper Option as => Show (Options as) where
     showsPrec _ as = foldr (.) id $
         [ showString "{"
         , showsHelper as
@@ -635,8 +620,8 @@ instance (Show a, ShowHelper Field as) =>
 
 
 ------------------------------------------------------------------------------
-instance (Show a, ShowHelper (Compose First Field) as) =>
-    ShowHelper (Compose First Field) (Cons (Pair s a) as)
+instance (Show a, ShowHelper Option as) =>
+    ShowHelper Option (Cons (Pair s a) as)
   where
     showsHelper (Cons a Nil) = showsOption a id
     showsHelper (Cons a as) = showsOption a (showString ", ") . showsHelper as
@@ -653,11 +638,16 @@ showsField (Field a) = foldr (.) id $
 
 ------------------------------------------------------------------------------
 showsOption :: forall a s. Show a
-    => Compose First Field (Pair s a)
+    => Option (Pair s a)
     -> ShowS
     -> ShowS
-showsOption (Compose (First (Just a))) f = showsField a . f
-showsOption (Compose (First Nothing)) _ = id
+showsOption (Option (Just a)) f = foldr (.) id $
+    [ showString $ symbolVal (Proxy :: Proxy s)
+    , showString " = "
+    , showsPrec 0 a
+    , f
+    ]
+showsOption (Option Nothing) _ = id
 
 
 ------------------------------------------------------------------------------
@@ -843,18 +833,18 @@ type instance
 #ifndef ClosedTypeFamilies
 type instance
 #endif
-    Selectors (Compose First Field) Nil = U1
+    Selectors Option Nil = U1
 #ifndef ClosedTypeFamilies
 type instance
 #endif
-    Selectors (Compose First Field) (Cons (Pair s a) Nil) =
+    Selectors Option (Cons (Pair s a) Nil) =
         S1 (MetaRecordSel s) (Rec0 (Maybe a))
 #ifndef ClosedTypeFamilies
 type instance
 #endif
-    Selectors (Compose First Field) (Cons (Pair s a) (Cons a' as)) =
+    Selectors Option (Cons (Pair s a) (Cons a' as)) =
         S1 (MetaRecordSel s) (Rec0 (Maybe a)) :*:
-            Selectors (Compose First Field) (Cons a' as)
+            Selectors Option (Cons a' as)
 #ifdef ClosedTypeFamilies
     Selectors f Nil = U1
     Selectors f (Cons (Pair s a) Nil) =
@@ -895,7 +885,7 @@ type instance
 #ifndef ClosedTypeFamilies
 type instance
 #endif
-    Constructors (Compose First Field) = C1 MetaRecordCons
+    Constructors Option = C1 MetaRecordCons
 #ifdef ClosedTypeFamilies
     Constructors (f :: KPair (KString, KPoly2) -> *) = C1 MetaRecordCons
     Constructors f = C1 MetaTupleCons
@@ -978,27 +968,23 @@ instance (KnownSymbol s, SGeneric Field (Cons a' as)) =>
 
 
 ------------------------------------------------------------------------------
-instance SGeneric (Compose First Field) Nil where
+instance SGeneric Option Nil where
     sto U1 = Nil
     sfrom Nil = U1
 
 
 ------------------------------------------------------------------------------
-instance KnownSymbol s => SGeneric (Compose First Field) (Cons (Pair s a) Nil)
-  where
-    sto (M1 (K1 a)) = Cons (Compose (First (fmap Field a))) Nil
-    sfrom (Cons (Compose (First (Just (Field a)))) _) = M1 (K1 (Just a))
-    sfrom (Cons (Compose (First Nothing)) _) = M1 (K1 Nothing)
+instance KnownSymbol s => SGeneric Option (Cons (Pair s a) Nil) where
+    sto (M1 (K1 a)) = Cons (Option a) Nil
+    sfrom (Cons (Option a) _) = M1 (K1 a)
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, SGeneric (Compose First Field) (Cons a' as)) =>
-    SGeneric (Compose First Field) (Cons (Pair s a) (Cons a' as))
+instance (KnownSymbol s, SGeneric Option (Cons a' as)) =>
+    SGeneric Option (Cons (Pair s a) (Cons a' as))
   where
-    sto (M1 (K1 a) :*: as) = Cons (Compose (First (fmap Field a))) (sto as)
-    sfrom (Cons (Compose (First (Just (Field a)))) as) =
-        M1 (K1 (Just a)) :*: sfrom as
-    sfrom (Cons (Compose (First Nothing)) as) = M1 (K1 Nothing) :*: sfrom as
+    sto (M1 (K1 a) :*: as) = Cons (Option a) (sto as)
+    sfrom (Cons (Option a) as) = M1 (K1 a) :*: sfrom as
 
 
 #ifdef ClosedTypeFamilies
@@ -1086,8 +1072,7 @@ instance SGeneric Field as => CGeneric Field as where
 
 
 ------------------------------------------------------------------------------
-instance SGeneric (Compose First Field) as =>
-    CGeneric (Compose First Field) as
+instance SGeneric Option as => CGeneric Option as
   where
     cto (M1 a) = sto a
     cfrom a = M1 (sfrom a)
@@ -1148,7 +1133,7 @@ type Tuple = Product Identity
 
 
 ------------------------------------------------------------------------------
-type Options = Product (Compose First Field)
+type Options = Product Option
 
 
 ------------------------------------------------------------------------------
@@ -1177,7 +1162,7 @@ infixr 5 <:.>
     => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
-(<:?>) = Cons . Compose . First . fmap Field
+(<:?>) = Cons . Option
 infixr 5 <:?>
 
 
@@ -1203,25 +1188,15 @@ pattern (:<:.>) a as = Cons (Field a) as
 infixr 5 :<:.>
 
 
-#if __GLASGOW_HASKELL__ >= 800
--- Doesn't compile in GHC 7.10, seems to be compiler bug
 ------------------------------------------------------------------------------
 pattern (:<:?>) :: forall s a as. KnownSymbol s
     => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
-pattern a :<:?> as <- Cons (Compose (First (viewOption -> a))) as
-  where
-    (:<:?>) = (<:?>)
+pattern (:<:?>) a as = Cons (Option a) as
 infixr 5 :<:?>
 
 
-------------------------------------------------------------------------------
-viewOption :: Maybe (Field (Pair s a)) -> Maybe a
-viewOption = fmap (\(Field a) -> a)
-
-
-#endif
 #endif
 ------------------------------------------------------------------------------
 class (as :: KList (KPoly1)) :<++> (bs :: KList (KPoly1)) where
@@ -1245,8 +1220,13 @@ instance (as :<++> bs, (Cons a as :<> bs) ~ (Cons a (as :<> bs))) =>
 ------------------------------------------------------------------------------
 fromOptions :: Options as -> Record as -> Record as
 fromOptions Nil Nil = Nil
-fromOptions (Cons (Compose (First a)) as) (Cons b bs) =
-    Cons (maybe b id a) (fromOptions as bs)
+#if __GLASGOW_HASKELL__ >= 700
+fromOptions (Cons (Option a) as) (Cons b bs) =
+    Cons (maybe b Field a) (fromOptions as bs)
+#else
+fromOptions (Cons (Option a) as) (Cons (Field b) bs) =
+    Cons (maybe (Field b) Field a) (fromOptions as bs)
+#endif
 #if __GLASGOW_HASKELL__ < 800
 fromOptions _ _ = undefined
 #endif
@@ -1263,16 +1243,14 @@ instance FromOptionsNoDefaults Nil where
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, FromOptionsNoDefaults as) =>
+instance FromOptionsNoDefaults as =>
     FromOptionsNoDefaults (Cons (Pair s a) as)
   where
-    fromOptionsNoDefaults (Cons (Compose (First (Just a))) as) =
-        Cons a (fromOptionsNoDefaults as)
-    fromOptionsNoDefaults (Cons (Compose (First Nothing)) _) =
+    fromOptionsNoDefaults (Cons (Option (Just a)) as) =
+        Cons (Field a) (fromOptionsNoDefaults as)
+    fromOptionsNoDefaults (Cons (Option Nothing) _) =
         error $ "Cannot get record from options: option "
-#if __GLASGOW_HASKELL__ >= 700
             ++ show (symbolVal (Proxy :: Proxy s))
-#endif
             ++ " is missing!"
 
 

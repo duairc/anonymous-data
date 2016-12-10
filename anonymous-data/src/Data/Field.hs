@@ -34,8 +34,12 @@ module Data.Field
     ( Field (Field)
     , field
     , (.=)
+    , Option (Option)
+    , option
+    , (?=)
     , at
     , Field1 (Field1)
+    , Option1 (Option1)
     )
 where
 
@@ -46,8 +50,19 @@ import qualified Symbols as S
 
 #endif
 -- base ----------------------------------------------------------------------
+#if MIN_VERSION_base(4, 4, 0)
+import           Control.Applicative
+                     (
 #if !MIN_VERSION_base(4, 8, 0)
-import           Control.Applicative (Applicative, pure, (<*>))
+                       Applicative
+                     , (<*>)
+                     ,
+#endif
+                       liftA2
+#if !MIN_VERSION_base(4, 8, 0)
+                     , pure
+#endif
+                     )
 #endif
 import           Control.Monad (guard)
 import           Control.Monad.Fix (MonadFix, mfix)
@@ -123,14 +138,16 @@ import           Data.Semigroup (Semigroup, (<>))
 #endif
 import           Data.String (IsString, fromString)
 #if !MIN_VERSION_base(4, 8, 0)
-import           Data.Traversable (Traversable)
+import           Data.Traversable (Traversable, traverse)
 #endif
-import qualified Data.Traversable (traverse)
 #ifdef PolyTypeable
 import           Data.Typeable (Typeable)
 #endif
 import           Foreign.Ptr (castPtr)
 import           Foreign.Storable (Storable, alignment, peek, poke, sizeOf)
+#if !MIN_VERSION_base(4, 8, 0)
+import           Prelude hiding (foldr)
+#endif
 
 
 -- deepseq -------------------------------------------------------------------
@@ -148,6 +165,7 @@ import           GHC.Generics.Compat
                      , M1 (M1)
                      , Par1 (Par1)
                      , Rec0
+                     , Rec1 (Rec1)
                      , Rep
                      , Rep1
                      , S1
@@ -253,7 +271,7 @@ readsPrecHelper rp p = readParen (p > 6) $ \s -> do
     (label, s''') <- readsPrec 11 s''
     guard $ label == symbolVal (Proxy :: Proxy s)
     (".=", s'''') <- lex s'''
-    (value, s''''') <- rp 6 s''''
+    (value, s''''') <- rp 7 s''''
     return $ (Field value, s''''')
 
 
@@ -464,6 +482,113 @@ instance NFData a => NFData (Field (Pair s a)) where
 
 
 ------------------------------------------------------------------------------
+data Option (p :: KPair (KString, *)) where
+    Option :: KnownSymbol s => !(Maybe a) -> Option (Pair s a)
+#ifdef PolyTypeable
+  deriving (Typeable)
+#endif
+
+
+------------------------------------------------------------------------------
+option :: KnownSymbol s => proxy s -> Maybe a -> Option (Pair s a)
+option _ = Option
+{-# INLINE option #-}
+
+
+------------------------------------------------------------------------------
+(?=) :: KnownSymbol s => proxy s -> Maybe a -> Option (Pair s a)
+(?=) _ = Option
+infix 6 ?=
+{-# INLINE (?=) #-}
+
+
+------------------------------------------------------------------------------
+instance Eq a => Eq (Option (Pair s a)) where
+    Option a == Option b = a == b
+
+
+------------------------------------------------------------------------------
+instance Ord a => Ord (Option (Pair s a)) where
+    compare (Option a) (Option b) = compare a b
+
+
+------------------------------------------------------------------------------
+instance (KnownSymbol s, Read a) => Read (Option (Pair s a)) where
+    readsPrec = readsPrecHelperOption readsPrec readList
+
+
+------------------------------------------------------------------------------
+instance Show a => Show (Option (Pair s a)) where
+    showsPrec = showsPrecHelperOption showsPrec showList
+
+
+------------------------------------------------------------------------------
+readsPrecHelperOption :: forall a s. KnownSymbol s
+    => (Int -> ReadS a)
+    -> ReadS [a]
+    -> Int
+    -> (ReadS (Option (Pair s a)))
+readsPrecHelperOption rp rl p = readParen (p > 6) $ \s -> do
+    ("at", s') <- lex s
+    ("@", s'') <- lex s'
+    (label, s''') <- readsPrec 11 s''
+    guard $ label == symbolVal (Proxy :: Proxy s)
+    ("?=", s'''') <- lex s'''
+    (value, s''''') <- liftReadsPrec rp rl 7 s''''
+    return $ (Option value, s''''')
+
+
+------------------------------------------------------------------------------
+showsPrecHelperOption :: forall a s. (Int -> a -> ShowS)
+    -> ([a] -> ShowS)
+    -> Int
+    -> Option (Pair s a)
+    -> ShowS
+showsPrecHelperOption sp sl p (Option a)
+    = showParen (p > 6) $ showString "at @"
+        . showsPrec 11 (symbolVal (Proxy :: Proxy s))
+        . showString " ?= "
+        . liftShowsPrec sp sl 7 a
+
+
+#if MIN_VERSION_base(4, 9, 0)
+------------------------------------------------------------------------------
+instance Semigroup (Option (Pair s a)) where
+    a@(Option (Just _)) <> _ = a
+    Option Nothing <> b = b
+
+
+#endif
+------------------------------------------------------------------------------
+instance KnownSymbol s => Monoid (Option (Pair s a)) where
+    mempty = Option Nothing
+    mappend a@(Option (Just _)) _ = a
+    mappend (Option Nothing) b = b
+
+
+#ifdef GenericDeriving
+------------------------------------------------------------------------------
+type OptionMetaData = MetaData S.Option S.DataField S.AnonymousData False
+type OptionMetaCons = MetaCons S.Option PrefixI True
+type OptionMetaSel s
+    = MetaSel (Just s) NoSourceUnpackedness SourceStrict DecidedStrict
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Generic (Option (Pair s a)) where
+    type Rep (Option (Pair s a)) = D1 OptionMetaData
+        (C1 OptionMetaCons (S1 (OptionMetaSel s) (Rec0 (Maybe a))))
+    from (Option a) = M1 (M1 (M1 (K1 a)))
+    to (M1 (M1 (M1 (K1 a)))) = Option a
+
+
+#endif
+------------------------------------------------------------------------------
+instance NFData a => NFData (Option (Pair s a)) where
+    rnf (Option a) = rnf a
+
+
+------------------------------------------------------------------------------
 -- | A newtype for all the so we can make instances of all the @* -> *@
 -- classes of which 'Field' is morally an instance.
 newtype Field1 s a = Field1 (Field (Pair s a))
@@ -578,7 +703,7 @@ instance KnownSymbol s => Applicative (Field1 s) where
 
 ------------------------------------------------------------------------------
 instance KnownSymbol s => Monad (Field1 s) where
-    return = Field1 . Field
+    return = pure
     {-# INLINE return #-}
     Field1 (Field a) >>= f = f a
     {-# INLINE (>>=) #-}
@@ -607,4 +732,140 @@ instance KnownSymbol s => MonadZip (Field1 s) where
     {-# INLINE munzip #-}
     mzipWith f (Field1 (Field a)) (Field1 (Field b)) = Field1 (Field (f a b))
     {-# INLINE mzipWith #-}
+#endif
+
+
+------------------------------------------------------------------------------
+-- | A newtype for all the so we can make instances of all the @* -> *@
+-- classes of which 'Option' is morally an instance.
+newtype Option1 s a = Option1 (Option (Pair s a))
+  deriving
+    ( Eq
+    , Ord
+    , Show
+#if MIN_VERSION_base(4, 9, 0)
+    , Semigroup
+#endif
+#ifdef PolyTypeable
+    , Typeable
+#endif
+    )
+deriving instance (KnownSymbol s, Read a) => Read (Option1 s a)
+deriving instance (KnownSymbol s, Monoid a) => Monoid (Option1 s a)
+#ifdef GenericDeriving
+
+
+------------------------------------------------------------------------------
+type Option1MetaData = MetaData S.Option1 S.DataField S.AnonymousData True
+type Option1MetaCons = MetaCons S.Option1 PrefixI False
+type Option1MetaSel
+    = MetaSel Nothing NoSourceUnpackedness SourceStrict DecidedStrict
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Generic (Option1 s a) where
+    type Rep (Option1 s a) = D1 Option1MetaData (C1 Option1MetaCons
+        (S1 Option1MetaSel (Rep (Option (Pair s a)))))
+    from (Option1 a) = M1 (M1 (M1 (from a)))
+    to (M1 (M1 (M1 a))) = Option1 (to a)
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Generic1 (Option1 s) where
+    type Rep1 (Option1 s) =
+        D1 Option1MetaData (C1 Option1MetaCons (S1 Option1MetaSel
+        (D1 OptionMetaData (C1 OptionMetaCons (S1 (OptionMetaSel s)
+        (Rec1 Maybe))))))
+    from1 (Option1 (Option a)) = M1 (M1 (M1 (M1 (M1 (M1 (Rec1 a))))))
+    to1 (M1 (M1 (M1 (M1 (M1 (M1 (Rec1 a))))))) = Option1 (Option a)
+#endif
+
+
+------------------------------------------------------------------------------
+instance Eq1 (Option1 s) where
+    liftEq eq (Option1 (Option a)) (Option1 (Option b)) = liftEq eq a b
+    {-# INLINE liftEq #-}
+
+
+------------------------------------------------------------------------------
+instance Ord1 (Option1 s) where
+    liftCompare cmp (Option1 (Option a)) (Option1 (Option b)) =
+        liftCompare cmp a b
+    {-# INLINE liftCompare #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Read1 (Option1 s) where
+    liftReadsPrec rp rl = readsData $
+        readsUnaryWith (readsPrecHelperOption rp rl) "Option1" Option1
+    {-# INLINE liftReadsPrec #-}
+
+
+------------------------------------------------------------------------------
+instance Show1 (Option1 s) where
+    liftShowsPrec sp sl p (Option1 a) =
+        showsUnaryWith (showsPrecHelperOption sp sl) "Option1" p a
+    {-# INLINE liftShowsPrec #-}
+
+
+------------------------------------------------------------------------------
+instance Functor (Option1 s) where
+    fmap f (Option1 (Option a)) = Option1 (Option (fmap f a))
+    {-# INLINE fmap #-}
+
+
+------------------------------------------------------------------------------
+instance Foldable (Option1 s) where
+    foldr f b (Option1 (Option a)) = foldr f b a
+    {-# INLINE foldr #-}
+
+
+------------------------------------------------------------------------------
+instance Traversable (Option1 s) where
+    traverse f (Option1 (Option a)) = fmap (Option1 . Option) $ traverse f a
+    {-# INLINE traverse #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Applicative (Option1 s) where
+    pure = Option1 . Option . pure
+    {-# INLINE pure #-}
+    Option1 (Option f) <*> Option1 (Option a) = Option1 (Option (f <*> a))
+    {-# INLINE (<*>) #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => Monad (Option1 s) where
+    return = pure
+    {-# INLINE return #-}
+    Option1 (Option a) >>= f = Option1 $ Option $ a >>= unwrap . f
+    {-# INLINE (>>=) #-}
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => MonadFix (Option1 s) where
+    mfix f = Option1 $ Option $ mfix (unwrap . f)
+    {-# INLINE mfix #-}
+
+
+------------------------------------------------------------------------------
+unwrap :: Option1 s a -> Maybe a
+unwrap (Option1 (Option a)) = a
+{-# INLINE unwrap #-}
+#if MIN_VERSION_base(4, 4, 0)
+
+
+------------------------------------------------------------------------------
+instance KnownSymbol s => MonadZip (Option1 s) where
+    munzip (Option1 (Option (Just (a, b)))) = (wrap (Just a), wrap (Just b))
+    munzip (Option1 (Option Nothing)) = (wrap Nothing, wrap Nothing)
+    {-# INLINE munzip #-}
+    mzipWith f (Option1 (Option a)) (Option1 (Option b)) = wrap (liftA2 f a b)
+    {-# INLINE mzipWith #-}
+
+
+------------------------------------------------------------------------------
+wrap :: KnownSymbol s => Maybe a -> Option1 s a
+wrap a = Option1 (Option a)
+{-# INLINE wrap #-}
 #endif

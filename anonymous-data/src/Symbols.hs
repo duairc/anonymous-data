@@ -14,7 +14,9 @@ module Symbols
     , DataAnonymousSum
     , DataField
     , Field
+    , Option
     , Field1
+    , Option1
     , Product
     , Sum
     )
@@ -28,7 +30,9 @@ type DataAnonymousProduct = "Data.Anonymous.Product"
 type DataAnonymousSum = "Data.Anonymous.Sum"
 type DataField = "Data.Field"
 type Field = "Field"
+type Option = "Option"
 type Field1 = "Field1"
+type Option1 = "Option1"
 type Product = "Product"
 type Sum = "Sum"
 #else
@@ -127,12 +131,29 @@ type Field = String (-- $("Field")
     Char O O I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Nil)
+type Option = String (-- $("Option")
+    Char I I I I O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O O O O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O O I O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O O I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Nil)
 type Field1 = String (-- $("Field1")
     Char O I I O O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O O I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Nil)
+type Option1 = String (-- $("Option1")
+    Char I I I I O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O O O O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O O I O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O O I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Nil)
 type Product = String (-- $("Product")

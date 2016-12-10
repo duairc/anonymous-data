@@ -22,13 +22,13 @@
 module Data.Anonymous.Profunctor
     ( ProductAdaptor
     , pProduct
-    , pRecord
     , pTuple
+    , pRecord
     )
 where
 
 -- anonymous-data ------------------------------------------------------------
-import           Data.Anonymous.Product (Product (Cons, Nil), Record, Tuple)
+import           Data.Anonymous.Product (Product (Cons, Nil), Tuple, Record)
 import           Data.Field (Field (Field))
 
 
@@ -98,17 +98,17 @@ instance
 
 
 ------------------------------------------------------------------------------
-pRecord
-    :: ProductAdaptor p Field abs as bs
-    => Record abs -> p (Record as) (Record bs)
-pRecord = pProduct
-
-
-------------------------------------------------------------------------------
 pTuple
     :: ProductAdaptor p Identity abs as bs
     => Tuple abs -> p (Tuple as) (Tuple bs)
 pTuple = pProduct
+
+
+------------------------------------------------------------------------------
+pRecord
+    :: ProductAdaptor p Field abs as bs
+    => Record abs -> p (Record as) (Record bs)
+pRecord = pProduct
 
 
 ------------------------------------------------------------------------------
