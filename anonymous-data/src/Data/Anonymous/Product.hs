@@ -74,7 +74,7 @@ module Data.Anonymous.Product
 
     , toOptions
     , fromOptions
-    , fromOptionsWithDefaults
+    , defaultingTo
 
     , LookupIndex'
 #ifdef ClosedTypeFamilies
@@ -1548,7 +1548,7 @@ htoList = hfoldr ((:) . (\(Const a) -> a)) []
 {-# INLINABLE htoList #-}
 
 
------------------------------------------------------------------------------
+------------------------------------------------------------------------------
 type family MapSnd (as :: KList (KPair (KPoly1, KPoly2))) :: KList (KPoly2)
 type instance MapSnd Nil = Nil
 type instance MapSnd (Cons a as) = Cons (Snd a) (MapSnd as)
@@ -1596,12 +1596,8 @@ fromOptions = htraverse (L.htraverse (\(First a) -> Identity <$> a))
 
 
 ------------------------------------------------------------------------------
-fromOptionsWithDefaults :: Monoid (Options as)
-    => Options as
-    -> Record as
-    -> Record as
-fromOptionsWithDefaults opt def =
-    maybe def id $ fromOptions (mappend opt (toOptions def))
+defaultingTo :: Monoid (Options as) => Options as -> Record as -> Record as
+defaultingTo os def = maybe def id $ fromOptions $ os `mappend` toOptions def
 
 
 ------------------------------------------------------------------------------
