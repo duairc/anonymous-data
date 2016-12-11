@@ -63,6 +63,10 @@ module Data.Anonymous.Product
 #endif
 
     , (:<++>) ((<++>))
+    , pmap
+    , pfoldr
+    , ptraverse
+    , ptoList
 
     , fromOptions
     , fromOptionsNoDefaults
@@ -193,7 +197,13 @@ import qualified Type.List.Fields as T
 
 
 -- base ----------------------------------------------------------------------
-import           Control.Applicative (Const (Const))
+import           Control.Applicative
+                     ( Applicative
+                     , Const (Const)
+                     , (<$>)
+                     , (<*>)
+                     , pure
+                     )
 import           Control.Monad (guard, msum)
 import           Data.Bits
                      ( Bits
@@ -1499,6 +1509,36 @@ instance (as :<++> bs, (Cons a as :<> bs) ~ (Cons a (as :<> bs))) =>
     (:<++>) (Cons a as) bs
   where
     Cons a as <++> bs = Cons a (as <++> bs)
+
+
+------------------------------------------------------------------------------
+pmap :: (forall a. g a -> h a) -> Product g as -> Product h as
+pmap _ Nil = Nil
+pmap f (Cons a as) = Cons (f a) (pmap f as)
+{-# INLINABLE pmap #-}
+
+
+------------------------------------------------------------------------------
+pfoldr :: (forall a. f a -> b -> b) -> b -> Product f as -> b
+pfoldr _ b Nil = b
+pfoldr f b (Cons a as) = f a (pfoldr f b as)
+{-# INLINABLE pfoldr #-}
+
+
+------------------------------------------------------------------------------
+ptraverse :: Applicative f
+    => (forall a. g a -> f (h a))
+    -> Product g as
+    -> f (Product h as)
+ptraverse _ Nil = pure Nil
+ptraverse f (Cons a as) = Cons <$> f a <*> ptraverse f as
+{-# INLINABLE ptraverse #-}
+
+
+------------------------------------------------------------------------------
+ptoList :: Product (Const a) as -> [a]
+ptoList = pfoldr ((:) . (\(Const a) -> a)) []
+{-# INLINABLE ptoList #-}
 
 
 ------------------------------------------------------------------------------
