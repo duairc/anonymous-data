@@ -28,7 +28,7 @@ library
 
   exposed-modules:
     Data.Anonymous.Product
-    Data.Field
+    Data.Labeled
 
   other-modules:
     Symbols

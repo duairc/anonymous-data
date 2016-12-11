@@ -12,11 +12,9 @@ module Symbols
     , AnonymousData
     , DataAnonymousProduct
     , DataAnonymousSum
-    , DataField
-    , Field
-    , Option
-    , Field1
-    , Option1
+    , DataLabeled
+    , Labeled
+    , Labeled1
     , Product
     , Sum
     )
@@ -28,11 +26,9 @@ type Empty_ = ""
 type AnonymousData = "anonymous-data"
 type DataAnonymousProduct = "Data.Anonymous.Product"
 type DataAnonymousSum = "Data.Anonymous.Sum"
-type DataField = "Data.Field"
-type Field = "Field"
-type Option = "Option"
-type Field1 = "Field1"
-type Option1 = "Option1"
+type DataLabeled = "Data.Labeled"
+type Labeled = "Labeled"
+type Labeled1 = "Labeled1"
 type Product = "Product"
 type Sum = "Sum"
 #else
@@ -112,48 +108,37 @@ type DataAnonymousSum = String (-- $("Data.Anonymous.Sum")
     Char I O I O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Nil)
-type DataField = String (-- $("Data.Field")
+type DataLabeled = String (-- $("Data.Labeled")
     Char O O I O O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O I I I O I O O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char O I I O O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char I O O I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O O I I O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O I O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Nil)
-type Field = String (-- $("Field")
-    Char O I I O O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char I O O I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+type Labeled = String (-- $("Labeled")
+    Char O O I I O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O I O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Nil)
-type Option = String (-- $("Option")
-    Char I I I I O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char O O O O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char O O I O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char I O O I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char I I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char O I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Nil)
-type Field1 = String (-- $("Field1")
-    Char O I I O O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char I O O I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+type Labeled1 = String (-- $("Labeled1")
+    Char O O I I O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char O I O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
+    Char I O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char O O I O O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char I O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Nil)
-type Option1 = String (-- $("Option1")
-    Char I I I I O O I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char O O O O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char O O I O I I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char I O O I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char I I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
-    Char O I I I O I I O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Char I O O O I I O O O O O O O O O O O O O O O O O O O O O O O O O O :+
     Nil)
 type Product = String (-- $("Product")

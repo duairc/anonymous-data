@@ -34,7 +34,6 @@
 
 #ifdef LanguagePatternSynonyms
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
 #endif
 
 #ifdef SafeHaskell
@@ -187,7 +186,7 @@ module Data.Anonymous.Product
 where
 
 -- anonymous-data ------------------------------------------------------------
-import           Data.Field (Field (Field), Option (Option))
+import           Data.Labeled (Labeled (Labeled), Field, Option)
 #ifdef GenericDeriving
 import qualified Symbols as S
 #endif
@@ -254,6 +253,7 @@ import qualified Data.Ix (index)
 #if !MIN_VERSION_base(4, 8, 0)
 import           Data.Monoid (Monoid, mappend, mempty)
 #endif
+import           Data.Monoid (First (First))
 #if MIN_VERSION_base(4, 9, 0)
 import           Data.Semigroup (Semigroup, (<>))
 #endif
@@ -554,7 +554,7 @@ readsField s = do
     guard $ label == symbolVal (Proxy :: Proxy s)
     ("=", s'') <- lex s'
     (a, s''') <- readsPrec 0 s''
-    return $ (Field a, s''')
+    return $ (Labeled (Identity a), s''')
 
 
 ------------------------------------------------------------------------------
@@ -568,8 +568,8 @@ readsOption f s = msum
         ("=", s'') <- lex s'
         (a, s''') <- readsPrec 0 s''
         (_, s'''') <- f s'''
-        return (Option (Just a), s'''')
-    , return (Option Nothing, s)
+        return (Labeled (First (Just a)), s'''')
+    , return (Labeled (First Nothing), s)
     ]
 
 
@@ -687,7 +687,7 @@ instance (Show a, ShowHelper Option as) =>
 
 ------------------------------------------------------------------------------
 showsField :: forall a s. Show a => Field (Pair s a) -> ShowS
-showsField (Field a) = foldr (.) id $
+showsField (Labeled (Identity a)) = foldr (.) id $
     [ showString $ symbolVal (Proxy :: Proxy s)
     , showString " = "
     , showsPrec 0 a
@@ -699,13 +699,13 @@ showsOption :: forall a s. Show a
     => Option (Pair s a)
     -> ShowS
     -> ShowS
-showsOption (Option (Just a)) f = foldr (.) id $
+showsOption (Labeled (First (Just a))) f = foldr (.) id $
     [ showString $ symbolVal (Proxy :: Proxy s)
     , showString " = "
     , showsPrec 0 a
     , f
     ]
-showsOption (Option Nothing) _ = id
+showsOption (Labeled (First (Nothing))) _ = id
 
 
 ------------------------------------------------------------------------------
@@ -1249,16 +1249,16 @@ instance SGeneric Field Nil where
 
 ------------------------------------------------------------------------------
 instance KnownSymbol s => SGeneric Field (Cons (Pair s a) Nil) where
-    sto (M1 (K1 a)) = Cons (Field a) Nil
-    sfrom (Cons (Field a) _) = M1 (K1 a)
+    sto (M1 (K1 a)) = Cons (Labeled (Identity a)) Nil
+    sfrom (Cons (Labeled (Identity a)) _) = M1 (K1 a)
 
 
 ------------------------------------------------------------------------------
 instance (KnownSymbol s, SGeneric Field (Cons a' as)) =>
     SGeneric Field (Cons (Pair s a) (Cons a' as))
   where
-    sto (M1 (K1 a) :*: as) = Cons (Field a) (sto as)
-    sfrom (Cons (Field a) as) = M1 (K1 a) :*: sfrom as
+    sto (M1 (K1 a) :*: as) = Cons (Labeled (Identity a)) (sto as)
+    sfrom (Cons (Labeled (Identity a)) as) = M1 (K1 a) :*: sfrom as
 
 
 ------------------------------------------------------------------------------
@@ -1269,16 +1269,16 @@ instance SGeneric Option Nil where
 
 ------------------------------------------------------------------------------
 instance KnownSymbol s => SGeneric Option (Cons (Pair s a) Nil) where
-    sto (M1 (K1 a)) = Cons (Option a) Nil
-    sfrom (Cons (Option a) _) = M1 (K1 a)
+    sto (M1 (K1 a)) = Cons (Labeled (First a)) Nil
+    sfrom (Cons (Labeled (First a)) _) = M1 (K1 a)
 
 
 ------------------------------------------------------------------------------
 instance (KnownSymbol s, SGeneric Option (Cons a' as)) =>
     SGeneric Option (Cons (Pair s a) (Cons a' as))
   where
-    sto (M1 (K1 a) :*: as) = Cons (Option a) (sto as)
-    sfrom (Cons (Option a) as) = M1 (K1 a) :*: sfrom as
+    sto (M1 (K1 a) :*: as) = Cons (Labeled (First a)) (sto as)
+    sfrom (Cons (Labeled (First a)) as) = M1 (K1 a) :*: sfrom as
 
 
 #ifdef ClosedTypeFamilies
@@ -1447,7 +1447,7 @@ infixr 5 <:>
     => a
     -> Record as
     -> Record (Cons (Pair s a) as)
-(<:.>) = Cons . Field
+(<:.>) = Cons . Labeled . Identity
 infixr 5 <:.>
 
 
@@ -1456,7 +1456,7 @@ infixr 5 <:.>
     => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
-(<:?>) = Cons . Option
+(<:?>) = Cons . Labeled . First
 infixr 5 <:?>
 
 
@@ -1478,7 +1478,7 @@ pattern (:<:.>) :: forall s a as. KnownSymbol s
     => a
     -> Record as
     -> Record (Cons (Pair s a) as)
-pattern (:<:.>) a as = Cons (Field a) as
+pattern (:<:.>) a as = Cons (Labeled (Identity a)) as
 infixr 5 :<:.>
 
 
@@ -1487,7 +1487,7 @@ pattern (:<:?>) :: forall s a as. KnownSymbol s
     => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
-pattern (:<:?>) a as = Cons (Option a) as
+pattern (:<:?>) a as = Cons (Labeled (First a)) as
 infixr 5 :<:?>
 
 
@@ -1545,11 +1545,13 @@ ptoList = pfoldr ((:) . (\(Const a) -> a)) []
 fromOptions :: Options as -> Record as -> Record as
 fromOptions Nil Nil = Nil
 #if __GLASGOW_HASKELL__ >= 700
-fromOptions (Cons (Option a) as) (Cons b bs) =
-    Cons (maybe b Field a) (fromOptions as bs)
+fromOptions (Cons (Labeled (First a)) as) (Cons b bs) =
+    Cons (maybe b (Labeled . Identity) a) (fromOptions as bs)
 #else
-fromOptions (Cons (Option a) as) (Cons (Field b) bs) =
-    Cons (maybe (Field b) Field a) (fromOptions as bs)
+fromOptions (Cons (Labeled (First a)) as) (Cons (Labeled (Identity b)) bs) =
+    Cons
+        (maybe (Labeled (Identity b)) (Labeled . Identity) a)
+        (fromOptions as bs)
 #endif
 #if __GLASGOW_HASKELL__ < 800
 fromOptions _ _ = undefined
@@ -1559,18 +1561,18 @@ fromOptions _ _ = undefined
 ------------------------------------------------------------------------------
 fromOptionsNoDefaults :: Options as -> Record as
 fromOptionsNoDefaults Nil = Nil
-fromOptionsNoDefaults (Cons o@(Option (Just a)) as) =
+fromOptionsNoDefaults (Cons o@(Labeled (First (Just a))) as) =
     Cons (fieldFromOption o a) (fromOptionsNoDefaults as)
   where
     fieldFromOption :: forall s a. Option (Pair s a) -> a -> Field (Pair s a)
-    fieldFromOption (Option _) b = Field b
-fromOptionsNoDefaults (Cons o@(Option Nothing) _) =
+    fieldFromOption (Labeled (First _)) b = Labeled (Identity b)
+fromOptionsNoDefaults (Cons o@(Labeled (First Nothing)) _) =
     error $ "Cannot get record from options: option "
         ++ symbol o
         ++ " is missing!"
   where
     symbol :: forall s a. Option (Pair s a) -> String
-    symbol (Option _) = symbolVal (Proxy :: Proxy s)
+    symbol (Labeled _) = symbolVal (Proxy :: Proxy s)
 
 
 ------------------------------------------------------------------------------
