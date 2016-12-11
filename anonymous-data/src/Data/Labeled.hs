@@ -8,6 +8,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -55,6 +56,9 @@ module Data.Labeled
     , option
     , (?=)
     , at
+    , hmap
+    , hfoldr
+    , htraverse
     , Labeled1 (Labeled1)
     , Field1
 #ifdef LanguagePatternSynonyms
@@ -635,6 +639,27 @@ lift2
     -> Labeled f (Pair s c)
 lift2 f (Labeled a) (Labeled b) = Labeled (f a b)
 {-# INLINE lift2 #-}
+
+
+------------------------------------------------------------------------------
+hmap :: (forall x. f x -> g x) -> Labeled f a -> Labeled g a
+hmap f (Labeled a) = Labeled (f a)
+{-# INLINE hmap #-}
+
+
+------------------------------------------------------------------------------
+hfoldr :: (forall x. f x -> b -> b) -> b -> Labeled f a -> b
+hfoldr f b (Labeled a) = f a b
+{-# INLINE hfoldr #-}
+
+
+------------------------------------------------------------------------------
+htraverse :: Applicative h
+    => (forall x. f x -> h (g x))
+    -> Labeled f a
+    -> h (Labeled g a)
+htraverse f (Labeled a) = Labeled <$> f a
+{-# INLINE htraverse #-}
 
 
 ------------------------------------------------------------------------------

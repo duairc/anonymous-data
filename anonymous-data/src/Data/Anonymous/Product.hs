@@ -62,13 +62,19 @@ module Data.Anonymous.Product
 #endif
 
     , (:<++>) ((<++>))
-    , pmap
-    , pfoldr
-    , ptraverse
-    , ptoList
+    , hmap
+    , hfoldr
+    , htraverse
+    , htoList
 
+#if __GLASGOW_HASKELL__ < 612
+    , label
+#endif
+    , unlabel
+
+    , toOptions
     , fromOptions
-    , fromOptionsNoDefaults
+    , fromOptionsWithDefaults
 
     , LookupIndex'
 #ifdef ClosedTypeFamilies
@@ -187,6 +193,7 @@ where
 
 -- anonymous-data ------------------------------------------------------------
 import           Data.Labeled (Labeled (Labeled), Field, Option)
+import qualified Data.Labeled as L (hmap, htraverse)
 #ifdef GenericDeriving
 import qualified Symbols as S
 #endif
@@ -318,7 +325,7 @@ import           Type.Meta (Proxy (Proxy))
 import           Type.Natural (Natural)
 #endif
 import           Type.Semigroup ((:<>))
-import           Type.Tuple.Pair (Pair)
+import           Type.Tuple.Pair (Pair, Snd)
 
 
 ------------------------------------------------------------------------------
@@ -550,8 +557,8 @@ instance __OVERLAPPABLE__ (Read a, KnownSymbol s, ReadHelper Option as) =>
 readsField :: forall a s. (Read a, KnownSymbol s)
     => ReadS (Field (Pair s a))
 readsField s = do
-    (label, s') <- lex s
-    guard $ label == symbolVal (Proxy :: Proxy s)
+    (label_, s') <- lex s
+    guard $ label_ == symbolVal (Proxy :: Proxy s)
     ("=", s'') <- lex s'
     (a, s''') <- readsPrec 0 s''
     return $ (Labeled (Identity a), s''')
@@ -563,8 +570,8 @@ readsOption :: forall a b s. (Read a, KnownSymbol s)
     -> ReadS (Option (Pair s a))
 readsOption f s = msum
     [ do
-        (label, s') <- lex s
-        guard $ label == symbolVal (Proxy :: Proxy s)
+        (label_, s') <- lex s
+        guard $ label_ == symbolVal (Proxy :: Proxy s)
         ("=", s'') <- lex s'
         (a, s''') <- readsPrec 0 s''
         (_, s'''') <- f s'''
@@ -1512,67 +1519,89 @@ instance (as :<++> bs, (Cons a as :<> bs) ~ (Cons a (as :<> bs))) =>
 
 
 ------------------------------------------------------------------------------
-pmap :: (forall a. g a -> h a) -> Product g as -> Product h as
-pmap _ Nil = Nil
-pmap f (Cons a as) = Cons (f a) (pmap f as)
-{-# INLINABLE pmap #-}
+hmap :: (forall a. g a -> h a) -> Product g as -> Product h as
+hmap _ Nil = Nil
+hmap f (Cons a as) = Cons (f a) (hmap f as)
+{-# INLINABLE hmap #-}
 
 
 ------------------------------------------------------------------------------
-pfoldr :: (forall a. f a -> b -> b) -> b -> Product f as -> b
-pfoldr _ b Nil = b
-pfoldr f b (Cons a as) = f a (pfoldr f b as)
-{-# INLINABLE pfoldr #-}
+hfoldr :: (forall a. f a -> b -> b) -> b -> Product f as -> b
+hfoldr _ b Nil = b
+hfoldr f b (Cons a as) = f a (hfoldr f b as)
+{-# INLINABLE hfoldr #-}
 
 
 ------------------------------------------------------------------------------
-ptraverse :: Applicative f
+htraverse :: Applicative f
     => (forall a. g a -> f (h a))
     -> Product g as
     -> f (Product h as)
-ptraverse _ Nil = pure Nil
-ptraverse f (Cons a as) = Cons <$> f a <*> ptraverse f as
-{-# INLINABLE ptraverse #-}
+htraverse _ Nil = pure Nil
+htraverse f (Cons a as) = Cons <$> f a <*> htraverse f as
+{-# INLINABLE htraverse #-}
 
 
 ------------------------------------------------------------------------------
-ptoList :: Product (Const a) as -> [a]
-ptoList = pfoldr ((:) . (\(Const a) -> a)) []
-{-# INLINABLE ptoList #-}
+htoList :: Product (Const a) as -> [a]
+htoList = hfoldr ((:) . (\(Const a) -> a)) []
+{-# INLINABLE htoList #-}
+
+
+-----------------------------------------------------------------------------
+type family MapSnd (as :: KList (KPair (KPoly1, KPoly2))) :: KList (KPoly2)
+type instance MapSnd Nil = Nil
+type instance MapSnd (Cons a as) = Cons (Snd a) (MapSnd as)
 
 
 ------------------------------------------------------------------------------
-fromOptions :: Options as -> Record as -> Record as
-fromOptions Nil Nil = Nil
-#if __GLASGOW_HASKELL__ >= 700
-fromOptions (Cons (Labeled (First a)) as) (Cons b bs) =
-    Cons (maybe b (Labeled . Identity) a) (fromOptions as bs)
+unlabel :: Product (Labeled f) as -> Product f (MapSnd as)
+unlabel Nil = Nil
+unlabel (Cons (Labeled a) as) = Cons a (unlabel as)
+
+
+#if __GLASGOW_HASKELL__ < 700
+-- FIXME: This won't compile on GHC 6.12 and I can't figure out a workaround
 #else
-fromOptions (Cons (Labeled (First a)) as) (Cons (Labeled (Identity b)) bs) =
-    Cons
-        (maybe (Labeled (Identity b)) (Labeled . Identity) a)
-        (fromOptions as bs)
-#endif
+------------------------------------------------------------------------------
+class Label as where
+    label :: Product f (MapSnd as) -> Product (Labeled f) as
+
+
+------------------------------------------------------------------------------
+instance Label Nil where
+    label Nil = Nil
 #if __GLASGOW_HASKELL__ < 800
-fromOptions _ _ = undefined
+    label _ = undefined
 #endif
 
 
 ------------------------------------------------------------------------------
-fromOptionsNoDefaults :: Options as -> Record as
-fromOptionsNoDefaults Nil = Nil
-fromOptionsNoDefaults (Cons o@(Labeled (First (Just a))) as) =
-    Cons (fieldFromOption o a) (fromOptionsNoDefaults as)
-  where
-    fieldFromOption :: forall s a. Option (Pair s a) -> a -> Field (Pair s a)
-    fieldFromOption (Labeled (First _)) b = Labeled (Identity b)
-fromOptionsNoDefaults (Cons o@(Labeled (First Nothing)) _) =
-    error $ "Cannot get record from options: option "
-        ++ symbol o
-        ++ " is missing!"
-  where
-    symbol :: forall s a. Option (Pair s a) -> String
-    symbol (Labeled _) = symbolVal (Proxy :: Proxy s)
+instance (KnownSymbol s, Label as) => Label (Cons (Pair s a) as) where
+    label (Cons a as) = Cons (Labeled a) (label as)
+#if __GLASGOW_HASKELL__ < 800
+    label _ = undefined
+#endif
+
+
+#endif
+------------------------------------------------------------------------------
+toOptions :: Record as -> Options as
+toOptions = hmap (L.hmap (\(Identity a) -> First (Just a)))
+
+
+------------------------------------------------------------------------------
+fromOptions :: Options as -> Maybe (Record as)
+fromOptions = htraverse (L.htraverse (\(First a) -> Identity <$> a))
+
+
+------------------------------------------------------------------------------
+fromOptionsWithDefaults :: Monoid (Options as)
+    => Options as
+    -> Record as
+    -> Record as
+fromOptionsWithDefaults opt def =
+    maybe def id $ fromOptions (mappend opt (toOptions def))
 
 
 ------------------------------------------------------------------------------
