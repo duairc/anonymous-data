@@ -50,31 +50,32 @@ module Data.Anonymous.Product
     , Record
     , Options
 
-    , (<::>)
-    , (<:>)
-    , (<:.>)
-    , (<:?>)
+    , (.::)
+    , (.:)
+    , (.=:)
+    , (?=:)
 #ifdef LanguagePatternSynonyms
-    , pattern (:<::>)
-    , pattern (:<:>)
-    , pattern (:<:.>)
-    , pattern (:<:?>)
+    , pattern (::::)
+    , pattern (:::)
+    , pattern (:.=:)
+    , pattern (:?=:)
 #endif
 
     , (:<++>) ((<++>))
+
     , hmap
     , hfoldr
     , htraverse
     , htoList
 
-#if __GLASGOW_HASKELL__ < 612
-    , label
-#endif
-    , unlabel
-
     , toOptions
     , fromOptions
     , defaultingTo
+
+#if __GLASGOW_HASKELL__ < 612
+    , Label (label)
+#endif
+    , unlabel
 
     , LookupIndex'
 #ifdef ClosedTypeFamilies
@@ -1446,64 +1447,64 @@ type Options = Product Option
 
 
 ------------------------------------------------------------------------------
-(<::>) :: f a -> Product f as -> Product f (Cons a as)
-(<::>) = Cons
-infixr 5 <::>
+(.::) :: f a -> Product f as -> Product f (Cons a as)
+(.::) = Cons
+infixr 5 .::
 
 
 ------------------------------------------------------------------------------
-(<:>) :: a -> Tuple as -> Tuple (Cons a as)
-(<:>) = Cons . Identity
-infixr 5 <:>
+(.:) :: a -> Tuple as -> Tuple (Cons a as)
+(.:) = Cons . Identity
+infixr 5 .:
 
 
 ------------------------------------------------------------------------------
-(<:.>) :: forall s a as. KnownSymbol s
+(.=:) :: forall s a as. KnownSymbol s
     => a
     -> Record as
     -> Record (Cons (Pair s a) as)
-(<:.>) = Cons . Labeled . Identity
-infixr 5 <:.>
+(.=:) = Cons . Labeled . Identity
+infixr 5 .=:
 
 
 ------------------------------------------------------------------------------
-(<:?>) :: forall s a as. KnownSymbol s
+(?=:) :: forall s a as. KnownSymbol s
     => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
-(<:?>) = Cons . Labeled . First
-infixr 5 <:?>
+(?=:) = Cons . Labeled . First
+infixr 5 ?=:
 
 
 #ifdef LanguagePatternSynonyms
 ------------------------------------------------------------------------------
-pattern (:<::>) :: f a -> Product f as -> Product f (Cons a as)
-pattern (:<::>) a as = Cons a as
-infixr 5 :<::>
+pattern (::::) :: f a -> Product f as -> Product f (Cons a as)
+pattern (::::) a as = Cons a as
+infixr 5 ::::
 
 
 ------------------------------------------------------------------------------
-pattern (:<:>) :: a -> Tuple as -> Tuple (Cons a as)
-pattern (:<:>) a as = Cons (Identity a) as
-infixr 5 :<:>
+pattern (:::) :: a -> Tuple as -> Tuple (Cons a as)
+pattern (:::) a as = Cons (Identity a) as
+infixr 5 :::
 
 
 ------------------------------------------------------------------------------
-pattern (:<:.>) :: forall s a as. KnownSymbol s
+pattern (:.=:) :: forall s a as. KnownSymbol s
     => a
     -> Record as
     -> Record (Cons (Pair s a) as)
-pattern (:<:.>) a as = Cons (Labeled (Identity a)) as
-infixr 5 :<:.>
+pattern (:.=:) a as = Cons (Labeled (Identity a)) as
+infixr 5 :.=:
 
 
 ------------------------------------------------------------------------------
-pattern (:<:?>) :: forall s a as. KnownSymbol s
+pattern (:?=:) :: forall s a as. KnownSymbol s
     => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
-pattern (:<:?>) a as = Cons (Labeled (First a)) as
-infixr 5 :<:?>
+pattern (:?=:) a as = Cons (Labeled (First a)) as
+infixr 5 :?=:
 
 
 #endif
@@ -1557,6 +1558,21 @@ htoList = hfoldr ((:) . (\(Const a) -> a)) []
 
 
 ------------------------------------------------------------------------------
+toOptions :: Record as -> Options as
+toOptions = hmap (L.hmap (\(Identity a) -> First (Just a)))
+
+
+------------------------------------------------------------------------------
+fromOptions :: Options as -> Maybe (Record as)
+fromOptions = htraverse (L.htraverse (\(First a) -> Identity <$> a))
+
+
+------------------------------------------------------------------------------
+defaultingTo :: Monoid (Options as) => Options as -> Record as -> Record as
+defaultingTo os def = maybe def id $ fromOptions $ os `mappend` toOptions def
+
+
+------------------------------------------------------------------------------
 type family MapSnd (as :: KList (KPair (KPoly1, KPoly2))) :: KList (KPoly2)
 type instance MapSnd Nil = Nil
 type instance MapSnd (Cons a as) = Cons (Snd a) (MapSnd as)
@@ -1593,21 +1609,6 @@ instance (KnownSymbol s, Label as) => Label (Cons (Pair s a) as) where
 
 
 #endif
-------------------------------------------------------------------------------
-toOptions :: Record as -> Options as
-toOptions = hmap (L.hmap (\(Identity a) -> First (Just a)))
-
-
-------------------------------------------------------------------------------
-fromOptions :: Options as -> Maybe (Record as)
-fromOptions = htraverse (L.htraverse (\(First a) -> Identity <$> a))
-
-
-------------------------------------------------------------------------------
-defaultingTo :: Monoid (Options as) => Options as -> Record as -> Record as
-defaultingTo os def = maybe def id $ fromOptions $ os `mappend` toOptions def
-
-
 ------------------------------------------------------------------------------
 class
 #ifdef ClosedTypeFamilies
