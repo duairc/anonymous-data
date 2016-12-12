@@ -20,7 +20,7 @@ where
 
 -- anonymous-data ------------------------------------------------------------
 import           Data.Anonymous.Product (Product (Cons, Nil))
-import           Data.Field (Field (Field), Option (Option))
+import           Data.Labeled (Labeled (Labeled), Labeled1 (Labeled1))
 
 
 -- hashable ------------------------------------------------------------------
@@ -33,13 +33,13 @@ import           Type.Tuple.Pair (Pair)
 
 
 ------------------------------------------------------------------------------
-instance Hashable a => Hashable (Field (Pair s a)) where
-    hashWithSalt s (Field a) = hashWithSalt s a
+instance Hashable (f a) => Hashable (Labeled f (Pair s a)) where
+    hashWithSalt s (Labeled a) = hashWithSalt s a
 
 
 ------------------------------------------------------------------------------
-instance Hashable a => Hashable (Option (Pair s a)) where
-    hashWithSalt s (Option a) = hashWithSalt s a
+instance Hashable (f a) => Hashable (Labeled1 f s a) where
+    hashWithSalt s (Labeled1 a) = hashWithSalt s a
 
 
 ------------------------------------------------------------------------------

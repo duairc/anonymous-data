@@ -29,7 +29,7 @@ where
 
 -- anonymous-data ------------------------------------------------------------
 import           Data.Anonymous.Product (Product (Cons, Nil), Tuple, Record)
-import           Data.Field (Field (Field))
+import           Data.Labeled (Field, Labeled (Labeled), Labeled1 (Labeled1))
 
 
 -- base ----------------------------------------------------------------------
@@ -52,16 +52,16 @@ import           Type.Tuple.Pair (Pair)
 
 
 ------------------------------------------------------------------------------
-class ProductProfunctor p => ProductAdaptor p g abs as bs
-    | g p as bs -> abs
-    , g abs -> as
-    , g abs -> bs
+class ProductProfunctor p => ProductAdaptor p f abs as bs
+    | f p as bs -> abs
+    , f abs -> as
+    , f abs -> bs
   where
-    pProduct :: Product g abs -> p (Product g as) (Product g bs)
+    pProduct :: Product f abs -> p (Product f as) (Product f bs)
 
 
 ------------------------------------------------------------------------------
-instance ProductProfunctor p => ProductAdaptor p g Nil Nil Nil where
+instance ProductProfunctor p => ProductAdaptor p f Nil Nil Nil where
     pProduct Nil = dimap (\Nil -> ()) (\() -> Nil) empty
 
 
@@ -91,9 +91,9 @@ instance
         (Cons (Pair s a) as)
         (Cons (Pair s b) bs)
   where
-    pProduct (Cons (Field a) as) = dimap
-        (\(Cons (Field a_) as_) -> (a_, as_))
-        (\(a_, as_) -> Cons (Field a_) as_)
+    pProduct (Cons (Labeled (Identity a)) as) = dimap
+        (\(Cons (Labeled (Identity a_)) as_) -> (a_, as_))
+        (\(a_, as_) -> Cons (Labeled (Identity a_)) as_)
         (a ***! pProduct as)
 
 
@@ -133,7 +133,15 @@ instance
 
 
 ------------------------------------------------------------------------------
-instance (Profunctor p, Default p a b, KnownSymbol s) =>
-    Default p (Field (Pair s a)) (Field (Pair s b))
+instance (Profunctor p, Default p (f a) (f b), KnownSymbol s) =>
+    Default p (Labeled f (Pair s a)) (Labeled f (Pair s b))
   where
-    def = dimap (\(Field a) -> a) Field (def :: p a b)
+    def = dimap (\(Labeled a) -> a) Labeled (def :: p (f a) (f b))
+
+
+------------------------------------------------------------------------------
+instance (Profunctor p, Default p (f a) (f b), KnownSymbol s) =>
+    Default p (Labeled1 f s a) (Labeled1 f s b)
+  where
+    def = dimap (\(Labeled1 (Labeled a)) -> a) (Labeled1 . Labeled)
+        (def :: p (f a) (f b))
