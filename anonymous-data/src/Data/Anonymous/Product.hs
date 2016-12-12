@@ -370,7 +370,7 @@ instance (ReadHelper Identity as, PlainRead Identity as) => Read (Tuple as)
     readsPrec _ s = msum
         [ do
             ("(", s') <- lex s
-            (as, s'') <- readsHelper s'
+            (as, s'') <- readsHelper readsNothing s'
             (")", s''') <- lex s''
             return (as, s''')
         , plainReads s
@@ -384,7 +384,7 @@ instance (ReadHelper (Const b) as, PlainRead (Const b) as) =>
     readsPrec _ s = msum
         [ do
             ("[", s') <- lex s
-            (as, s'') <- readsHelper s'
+            (as, s'') <- readsHelper readsNothing s'
             ("]", s''') <- lex s''
             return (as, s''')
         , plainReads s
@@ -396,7 +396,7 @@ instance (ReadHelper Field as, PlainRead Field as) => Read (Record as) where
     readsPrec _ s = msum
         [ do
             ("{", s') <- lex s
-            (as, s'') <- readsHelper s'
+            (as, s'') <- readsHelper readsNothing s'
             ("}", s''') <- lex s''
             return (as, s''')
         , plainReads s
@@ -409,7 +409,7 @@ instance (ReadHelper Option as, PlainRead Option as) => Read (Options as)
     readsPrec _ s = msum
         [ do
             ("{", s') <- lex s
-            (as, s'') <- readsHelper s'
+            (as, s'') <- readsHelper readsNothing s'
             ("}", s''') <- lex s''
             return (as, s''')
         , plainReads s
@@ -432,42 +432,43 @@ instance PlainRead g Nil where
 instance PlainReadHelper g (Cons a as) => PlainRead g (Cons a as) where
     plainReads s = do
         ("<", s') <- lex s
-        (as, s'') <- plainReadsHelper s'
+        (as, s'') <- plainReadsHelper readsNothing s'
         (">", s''') <- lex s''
         return (as, s''')
 
 
 ------------------------------------------------------------------------------
 class PlainReadHelper g as where
-    plainReadsHelper :: ReadS (Product g as)
+    plainReadsHelper :: ReadS () -> ReadS (Product g as)
 
 
 ------------------------------------------------------------------------------
 instance PlainReadHelper g Nil where
-    plainReadsHelper s = return (Nil, s)
+    plainReadsHelper _ s = return (Nil, s)
 
 
 ------------------------------------------------------------------------------
 instance Read (g a) => PlainReadHelper g (Cons a Nil) where
-    plainReadsHelper s = do
-        (a, s') <- readsPrec 0 s
-        return (Cons a Nil, s')
+    plainReadsHelper f s = do
+        ((), s') <- f s
+        (a, s'') <- readsPrec 0 s'
+        return (Cons a Nil, s'')
 
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPABLE__ (Read (g a), PlainReadHelper g as) =>
     PlainReadHelper g (Cons a as)
   where
-    plainReadsHelper s = do
-        (a, s') <- readsPrec 0 s
-        (",", s'') <- lex s'
-        (as, s''') <- plainReadsHelper s''
+    plainReadsHelper f s = do
+        ((), s') <- f s
+        (a, s'') <- readsPrec 0 s'
+        (as, s''') <- plainReadsHelper readsComma s''
         return (Cons a as, s''')
 
 
 ------------------------------------------------------------------------------
 class ReadHelper g as where
-    readsHelper :: ReadS (Product g as)
+    readsHelper :: ReadS () -> ReadS (Product g as)
 
 
 ------------------------------------------------------------------------------
@@ -477,37 +478,39 @@ instance __OVERLAPPABLE__ PlainReadHelper g as => ReadHelper g as where
 
 ------------------------------------------------------------------------------
 instance Read a => ReadHelper Identity (Cons a Nil) where
-    readsHelper s = do
-        (a, s') <- readsPrec 0 s
-        return (Cons (Identity a) Nil, s')
+    readsHelper f s = do
+        ((), s') <- f s
+        (a, s'') <- readsPrec 0 s'
+        return (Cons (Identity a) Nil, s'')
 
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPABLE__ (Read a, ReadHelper Identity as) =>
     ReadHelper Identity (Cons a as)
   where
-    readsHelper s = do
-        (a, s') <- readsPrec 0 s
-        (",", s'') <- lex s'
-        (as, s''') <- readsHelper s''
+    readsHelper f s = do
+        ((), s') <- f s
+        (a, s'') <- readsPrec 0 s'
+        (as, s''') <- readsHelper readsComma s''
         return (Cons (Identity a) as, s''')
 
 
 ------------------------------------------------------------------------------
 instance Read b => ReadHelper (Const b) (Cons a Nil) where
-    readsHelper s = do
-        (b, s') <- readsPrec 0 s
-        return (Cons (Const b) Nil, s')
+    readsHelper f s = do
+        ((), s') <- f s
+        (b, s'') <- readsPrec 0 s'
+        return (Cons (Const b) Nil, s'')
 
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPABLE__ (Read b, ReadHelper (Const b) as) =>
     ReadHelper (Const b) (Cons a as)
   where
-    readsHelper s = do
-        (b, s') <- readsPrec 0 s
-        (",", s'') <- lex s'
-        (as, s''') <- readsHelper s''
+    readsHelper f s = do
+        ((), s') <- f s
+        (b, s'') <- readsPrec 0 s'
+        (as, s''') <- readsHelper readsComma s''
         return (Cons (Const b) as, s''')
 
 
@@ -515,27 +518,28 @@ instance __OVERLAPPABLE__ (Read b, ReadHelper (Const b) as) =>
 instance (Read a, KnownSymbol s) =>
     ReadHelper Field (Cons (Pair s a) Nil)
   where
-    readsHelper s = do
-        (a, s') <- readsField s
-        return (Cons a Nil, s')
+    readsHelper f s = do
+        ((), s') <- f s
+        (a, s'') <- readsField s'
+        return (Cons a Nil, s'')
 
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPABLE__ (Read a, KnownSymbol s, ReadHelper Field as) =>
     ReadHelper Field (Cons (Pair s a) as)
   where
-    readsHelper s = do
-        (a, s') <- readsField s
-        (",", s'') <- lex s'
-        (as, s''') <- readsHelper s''
+    readsHelper f s = do
+        ((), s') <- f s
+        (a, s'') <- readsField s'
+        (as, s''') <- readsHelper readsComma s''
         return (Cons a as, s''')
 
 
 ------------------------------------------------------------------------------
 instance (Read a, KnownSymbol s) => ReadHelper Option (Cons (Pair s a) Nil)
   where
-    readsHelper s = do
-        (a, s') <- readsOption (return . (,) ()) s
+    readsHelper f s = do
+        ((_, a), s') <- readsOption f s
         return (Cons a Nil, s')
 
 
@@ -543,14 +547,22 @@ instance (Read a, KnownSymbol s) => ReadHelper Option (Cons (Pair s a) Nil)
 instance __OVERLAPPABLE__ (Read a, KnownSymbol s, ReadHelper Option as) =>
     ReadHelper Option (Cons (Pair s a) as)
   where
-    readsHelper s = do
-        (a, s') <- readsOption comma s
-        (as, s'') <- readsHelper s'
+    readsHelper f s = do
+        ((f', a), s') <- readsOption f s
+        (as, s'') <- readsHelper f' s'
         return (Cons a as, s'')
-      where
-        comma s' = do
-            (",", s'') <- lex s'
-            return ((), s'')
+
+
+------------------------------------------------------------------------------
+readsNothing :: ReadS ()
+readsNothing = return . ((,) ())
+
+
+------------------------------------------------------------------------------
+readsComma :: ReadS ()
+readsComma s = do
+    (",", s') <- lex s
+    return ((), s')
 
 
 ------------------------------------------------------------------------------
@@ -565,18 +577,19 @@ readsField s = do
 
 
 ------------------------------------------------------------------------------
-readsOption :: forall a b s. (Read a, KnownSymbol s)
-    => ReadS b
-    -> ReadS (Option (Pair s a))
+readsOption :: forall a s. (Read a, KnownSymbol s)
+    => ReadS ()
+    -> (ReadS (ReadS (), Option (Pair s a)))
 readsOption f s = msum
     [ do
-        (label_, s') <- lex s
+        ((), s') <- f s
+        (label_, s'') <- lex s'
         guard $ label_ == symbolVal (Proxy :: Proxy s)
-        ("=", s'') <- lex s'
-        (a, s''') <- readsPrec 0 s''
-        (_, s'''') <- f s'''
-        return (Labeled (First (Just a)), s'''')
-    , return (Labeled (First Nothing), s)
+        ("=", s''') <- lex s''
+        (a, s'''') <- readsPrec 0 s'''
+        (_, s''''') <- f s''''
+        return ((readsComma, Labeled (First (Just a))), s''''')
+    , return ((f, Labeled (First Nothing)), s)
     ]
 
 
@@ -584,7 +597,7 @@ readsOption f s = msum
 instance __INCOHERENT__ ShowHelper g as => Show (Product g as) where
     showsPrec _ as = foldr (.) id $
         [ showString "<"
-        , showsHelper as
+        , showsHelper id as
         , showString ">"
         ]
 
@@ -593,7 +606,7 @@ instance __INCOHERENT__ ShowHelper g as => Show (Product g as) where
 instance ShowHelper Identity as => Show (Tuple as) where
     showsPrec _ as = foldr (.) id $
         [ showString "("
-        , showsHelper as
+        , showsHelper id as
         , showString ")"
         ]
 
@@ -602,7 +615,7 @@ instance ShowHelper Identity as => Show (Tuple as) where
 instance ShowHelper (Const b) as => Show (Product (Const b) as) where
     showsPrec _ as = foldr (.) id $
         [ showString "["
-        , showsHelper as
+        , showsHelper id as
         , showString "]"
         ]
 
@@ -611,7 +624,7 @@ instance ShowHelper (Const b) as => Show (Product (Const b) as) where
 instance ShowHelper Field as => Show (Record as) where
     showsPrec _ as = foldr (.) id $
         [ showString "{"
-        , showsHelper as
+        , showsHelper id as
         , showString "}"
         ]
 
@@ -620,19 +633,19 @@ instance ShowHelper Field as => Show (Record as) where
 instance ShowHelper Option as => Show (Options as) where
     showsPrec _ as = foldr (.) id $
         [ showString "{"
-        , showsHelper as
+        , showsHelper id as
         , showString "}"
         ]
 
 
 ------------------------------------------------------------------------------
 class ShowHelper g as where
-    showsHelper :: Product g as -> ShowS
+    showsHelper :: ShowS -> Product g as -> ShowS
 
 
 ------------------------------------------------------------------------------
 instance ShowHelper g Nil where
-    showsHelper Nil = id
+    showsHelper _ Nil = id
 
 
 ------------------------------------------------------------------------------
@@ -641,55 +654,50 @@ instance __OVERLAPPABLE__
   =>
     ShowHelper g (Cons a as)
   where
-    showsHelper (Cons a Nil) = showsPrec 0 a
-    showsHelper (Cons a as) = foldr (.) id $
-        [ showsPrec 0 a
-        , showString ", "
-        , showsHelper as
-        ]
+    showsHelper f (Cons a Nil) = f . showsPrec 0 a
+    showsHelper f (Cons a as) = f . showsPrec 0 a
+        . showsHelper showsComma as
 
 
 ------------------------------------------------------------------------------
 instance (Show a, ShowHelper Identity as) => ShowHelper Identity (Cons a as)
   where
-    showsHelper (Cons (Identity a) Nil) = showsPrec 0 a
-    showsHelper (Cons (Identity a) as) = foldr (.) id $
-        [ showsPrec 0 a
-        , showString ", "
-        , showsHelper as
-        ]
+    showsHelper f (Cons (Identity a) Nil) = f . showsPrec 0 a
+    showsHelper f (Cons (Identity a) as) = f . showsPrec 0 a
+        . showsHelper showsComma as
 
 
 ------------------------------------------------------------------------------
 instance (Show b, ShowHelper (Const b) as) =>
     ShowHelper (Const b) (Cons a as)
   where
-    showsHelper (Cons (Const a) Nil) = showsPrec 0 a
-    showsHelper (Cons (Const a) as) = foldr (.) id $
-        [ showsPrec 0 a
-        , showString ", "
-        , showsHelper as
-        ]
+    showsHelper f (Cons (Const a) Nil) = f . showsPrec 0 a
+    showsHelper f (Cons (Const a) as) = f . showsPrec 0 a
+        . showsHelper showsComma as
 
 
 ------------------------------------------------------------------------------
 instance (Show a, ShowHelper Field as) =>
     ShowHelper Field (Cons (Pair s a) as)
   where
-    showsHelper (Cons a Nil) = showsField a
-    showsHelper (Cons a as) = foldr (.) id $
-        [ showsField a
-        , showString ", "
-        , showsHelper as
-        ]
+    showsHelper f (Cons a Nil) = f . showsField a
+    showsHelper f (Cons a as) = f . showsField a
+        . showsHelper showsComma as
 
 
 ------------------------------------------------------------------------------
 instance (Show a, ShowHelper Option as) =>
     ShowHelper Option (Cons (Pair s a) as)
   where
-    showsHelper (Cons a Nil) = showsOption a id
-    showsHelper (Cons a as) = showsOption a (showString ", ") . showsHelper as
+    showsHelper f (Cons a Nil) = snd $ showsOption a f
+    showsHelper f (Cons a as) = let (f', s) = showsOption a f in
+        s . showsHelper f' as
+
+
+------------------------------------------------------------------------------
+showsComma :: ShowS
+showsComma = showString ", "
+{-# INLINE showsComma #-}
 
 
 ------------------------------------------------------------------------------
@@ -705,14 +713,14 @@ showsField (Labeled (Identity a)) = foldr (.) id $
 showsOption :: forall a s. Show a
     => Option (Pair s a)
     -> ShowS
-    -> ShowS
-showsOption (Labeled (First (Just a))) f = foldr (.) id $
-    [ showString $ symbolVal (Proxy :: Proxy s)
+    -> (ShowS, ShowS)
+showsOption (Labeled (First (Just a))) f = (showsComma, foldr (.) id $
+    [ f
+    , showString $ symbolVal (Proxy :: Proxy s)
     , showString " = "
     , showsPrec 0 a
-    , f
-    ]
-showsOption (Labeled (First (Nothing))) _ = id
+    ])
+showsOption (Labeled (First (Nothing))) f = (f, id)
 
 
 ------------------------------------------------------------------------------
