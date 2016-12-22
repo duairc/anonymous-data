@@ -24,6 +24,7 @@ module Data.Anonymous.Profunctor
     , pProduct
     , pTuple
     , pRecord
+    , pField
     )
 where
 
@@ -98,15 +99,13 @@ instance
 
 
 ------------------------------------------------------------------------------
-pTuple
-    :: ProductAdaptor p Identity abs as bs
+pTuple :: ProductAdaptor p Identity abs as bs
     => Tuple abs -> p (Tuple as) (Tuple bs)
 pTuple = pProduct
 
 
 ------------------------------------------------------------------------------
-pRecord
-    :: ProductAdaptor p Field abs as bs
+pRecord :: ProductAdaptor p Field abs as bs
     => Record abs -> p (Record as) (Record bs)
 pRecord = pProduct
 
@@ -140,8 +139,67 @@ instance (Profunctor p, Default p (f a) (f b), KnownSymbol s) =>
 
 
 ------------------------------------------------------------------------------
-instance (Profunctor p, Default p (f a) (f b), KnownSymbol s) =>
+instance (Profunctor p, Default p (f a) (Maybe (f b)), KnownSymbol s) =>
+    Default p (Labeled f (Pair s a)) (Maybe (Labeled f (Pair s b)))
+  where
+    def = dimap unlabel (fmap Labeled) def
+
+
+------------------------------------------------------------------------------
+instance (Profunctor p, Default p (Maybe (f a)) (f b), KnownSymbol s) =>
+    Default p (Maybe (Labeled f (Pair s a))) (Labeled f (Pair s b))
+  where
+    def = dimap (fmap unlabel) Labeled def
+
+
+------------------------------------------------------------------------------
+instance
+    (Profunctor p, Default p (Maybe (f a)) (Maybe (f b)), KnownSymbol s)
+  =>
+    Default p (Maybe (Labeled f (Pair s a))) (Maybe (Labeled f (Pair s b)))
+  where
+    def = dimap (fmap unlabel) (fmap Labeled) def
+
+
+------------------------------------------------------------------------------
+instance (Profunctor p, Default p (f a) [f b], KnownSymbol s) =>
+    Default p (Labeled f (Pair s a)) [Labeled f (Pair s b)]
+  where
+    def = dimap unlabel (fmap Labeled) def
+
+
+------------------------------------------------------------------------------
+instance (Profunctor p, Default p [f a] (f b), KnownSymbol s) =>
+    Default p [Labeled f (Pair s a)] (Labeled f (Pair s b))
+  where
+    def = dimap (fmap unlabel) Labeled def
+
+
+------------------------------------------------------------------------------
+instance (Profunctor p, Default p [f a] [f b], KnownSymbol s) =>
+    Default p [Labeled f (Pair s a)] [Labeled f (Pair s b)]
+  where
+    def = dimap (fmap unlabel) (fmap Labeled) def
+
+
+------------------------------------------------------------------------------
+unlabel :: Labeled f (Pair s a) -> f a
+unlabel (Labeled a) = a
+
+
+------------------------------------------------------------------------------
+pField :: Profunctor p
+    => Field (Pair s (p a b)) -> p (Field (Pair s a)) (Field (Pair s b))
+pField (Labeled (Identity p)) =
+    dimap ((\(Identity a) -> a) . unlabel) (Labeled . Identity) p
+
+
+------------------------------------------------------------------------------
+instance
+    ( Profunctor p
+    , Default p (Labeled f (Pair s a)) (Labeled f (Pair s b))
+    )
+  =>
     Default p (Labeled1 f s a) (Labeled1 f s b)
   where
-    def = dimap (\(Labeled1 (Labeled a)) -> a) (Labeled1 . Labeled)
-        (def :: p (f a) (f b))
+    def = dimap (\(Labeled1 a) -> a) Labeled1 def
