@@ -35,7 +35,6 @@ import           Data.Labeled (Field, Labeled (Labeled), Labeled1 (Labeled1))
 
 -- base ----------------------------------------------------------------------
 import           Data.Functor.Identity (Identity (Identity))
-import           Data.Void (Void, absurd)
 
 
 -- product-profunctors -------------------------------------------------------
@@ -44,7 +43,7 @@ import           Data.Profunctor.Product.Default (Default (def))
 
 
 -- profunctors ---------------------------------------------------------------
-import           Data.Profunctor (Profunctor, dimap, lmap, rmap)
+import           Data.Profunctor (Profunctor, dimap)
 
 
 -- types ---------------------------------------------------------------------
@@ -133,58 +132,10 @@ instance
 
 
 ------------------------------------------------------------------------------
-instance ProductProfunctor p => Default p () (Product f Nil) where
-    def = rmap (\() -> Nil) empty
-
-
-------------------------------------------------------------------------------
-instance
-    ( ProductProfunctor p
-    , Default p () (f a)
-    , Default p () (Product f as)
-    )
-  =>
-    Default p () (Product f (Cons a as))
-  where
-    def = dimap (const ((), ())) (uncurry Cons) (def ***! def)
-
-
-------------------------------------------------------------------------------
-instance
-    ( ProductProfunctor p
-    , Default p (f a) Void
-    , Default p (Product f as) Void
-    )
-  =>
-    Default p (Product f (Cons a as)) Void
-  where
-    def = dimap uncons (absurd . snd) ((def :: p (f a) Void) ***! def)
-
-
-------------------------------------------------------------------------------
-uncons :: Product f (Cons a as) -> (f a, Product f as)
-uncons (Cons a as) = (a, as)
-
-
-------------------------------------------------------------------------------
 instance (Profunctor p, Default p (f a) (f b), KnownSymbol s) =>
     Default p (Labeled f (Pair s a)) (Labeled f (Pair s b))
   where
     def = dimap (\(Labeled a) -> a) Labeled (def :: p (f a) (f b))
-
-
-------------------------------------------------------------------------------
-instance (Profunctor p, Default p () (f a), KnownSymbol s) =>
-    Default p () (Labeled f (Pair s a))
-  where
-    def = rmap Labeled def
-
-
-------------------------------------------------------------------------------
-instance (Profunctor p, Default p (f a) Void) =>
-    Default p (Labeled f (Pair s a)) Void
-  where
-    def = lmap unlabel def
 
 
 ------------------------------------------------------------------------------
