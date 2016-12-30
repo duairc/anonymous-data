@@ -80,7 +80,7 @@ type family LookupValue (n :: v) (as :: [(k, v)]) :: k where
 ------------------------------------------------------------------------------
 type family UpdateValue (n :: v) (b :: k) (as :: [(k, v)]) :: [(k, v)] where
     UpdateValue v k' ('(k, v) ': as) = '(k', v) ': as
-    UpdateValue v k' (a ': as) = a ': UpdateValue k' v as
+    UpdateValue v k' (a ': as) = a ': UpdateValue v k' as
 
 
 ------------------------------------------------------------------------------
