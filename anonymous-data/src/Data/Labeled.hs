@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -209,37 +210,33 @@ import           GHC.Generics.Compat
                      , to1
                      )
 #endif
-import           GHC.TypeLits.Compat
-                     ( KnownSymbol
 #ifdef DataPolyKinds
-                     , Symbol
+import           GHC.TypeLits.Compat (Symbol)
 #endif
-                     , symbolVal
-                     )
 #ifdef GenericDeriving
 import           Type.Bool (False, True)
 import           Type.Maybe (Just, Nothing)
 #endif
-import           Type.Meta (Proxy (Proxy))
+import           Type.Meta (Known, Val, val, Proxy (Proxy))
 import           Type.Tuple.Pair (Pair)
 
 
 ------------------------------------------------------------------------------
-data Labeled (f :: KPoly1 -> *) (p :: KPair (KString, KPoly1)) where
-    Labeled :: KnownSymbol s => !(f a) -> Labeled f (Pair s a)
+data Labeled (f :: KPoly2 -> *) (p :: KPair (KPoly1, KPoly2)) where
+    Labeled :: Known s => !(f a) -> Labeled f (Pair s a)
 #ifdef PolyTypeable
   deriving (Typeable)
 #endif
 
 
 ------------------------------------------------------------------------------
-labeled :: KnownSymbol s => proxy s -> f a -> Labeled f (Pair s a)
+labeled :: Known s => proxy s -> f a -> Labeled f (Pair s a)
 labeled _ a = Labeled a
 {-# INLINE labeled #-}
 
 
 ------------------------------------------------------------------------------
-(.=.) :: KnownSymbol s => proxy s -> f a -> Labeled f (Pair s a)
+(.=.) :: Known s => proxy s -> f a -> Labeled f (Pair s a)
 (.=.) _ a = Labeled a
 infix 6 .=.
 {-# INLINE (.=.) #-}
@@ -251,19 +248,19 @@ type Field = Labeled Identity
 
 #ifdef LanguagePatternSynonyms
 ------------------------------------------------------------------------------
-pattern Field :: KnownSymbol s => a -> Field (Pair s a)
+pattern Field :: Known s => a -> Field (Pair s a)
 pattern Field a = Labeled (Identity a)
 
 
 #endif
 ------------------------------------------------------------------------------
-field :: KnownSymbol s => proxy s -> a -> Field (Pair s a)
+field :: Known s => proxy s -> a -> Field (Pair s a)
 field _ a = Labeled (Identity a)
 {-# INLINE field #-}
 
 
 ------------------------------------------------------------------------------
-(.=) :: KnownSymbol s => proxy s -> a -> Field (Pair s a)
+(.=) :: Known s => proxy s -> a -> Field (Pair s a)
 (.=) _ a = Labeled (Identity a)
 infix 6 .=
 {-# INLINE (.=) #-}
@@ -275,19 +272,19 @@ type Option = Labeled First
 
 #ifdef LanguagePatternSynonyms
 ------------------------------------------------------------------------------
-pattern Option :: KnownSymbol s => Maybe a -> Option (Pair s a)
+pattern Option :: Known s => Maybe a -> Option (Pair s a)
 pattern Option a = Labeled (First a)
 
 
 #endif
 ------------------------------------------------------------------------------
-option :: KnownSymbol s => proxy s -> Maybe a -> Option (Pair s a)
+option :: Known s => proxy s -> Maybe a -> Option (Pair s a)
 option _ a = Labeled (First a)
 {-# INLINE option #-}
 
 
 ------------------------------------------------------------------------------
-(?=) :: KnownSymbol s => proxy s -> Maybe a -> Option (Pair s a)
+(?=) :: Known s => proxy s -> Maybe a -> Option (Pair s a)
 (?=) _ a = Labeled (First a)
 infix 6 ?=
 {-# INLINE (?=) #-}
@@ -300,7 +297,7 @@ at = Proxy
 
 
 ------------------------------------------------------------------------------
-instance Eq (f a)  => Eq (Labeled f (Pair s a)) where
+instance Eq (f a) => Eq (Labeled f (Pair s a)) where
     Labeled a == Labeled b = a == b
 
 
@@ -310,130 +307,142 @@ instance Ord (f a) => Ord (Labeled f (Pair s a)) where
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__ (KnownSymbol s, Read (f a)) =>
+instance __OVERLAPPABLE__ (Known s, Eq (Val s), Read (Val s), Read (f a)) =>
     Read (Labeled f (Pair s a))
   where
     readsPrec = readsLabeled readsPrec
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Read a) => Read (Field (Pair s a)) where
+instance (Known s, Eq (Val s), Read (Val s), Read a) =>
+    Read (Field (Pair s a))
+  where
     readsPrec p s = readsField readsPrec p s <|> readsLabeled readsPrec p s
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Read a) => Read (Option (Pair s a)) where
+instance (Known s, Eq (Val s), Read (Val s), Read a) =>
+    Read (Option (Pair s a))
+  where
     readsPrec p s =
         readsOption readsPrec readList p s <|> readsLabeled readsPrec p s
 
 
 ------------------------------------------------------------------------------
-instance __INCOHERENT__ Show (f a) => Show (Labeled f (Pair s a)) where
+instance __INCOHERENT__ (Show (Val s), Show (f a)) =>
+    Show (Labeled f (Pair s a))
+  where
     showsPrec = showsLabeled showsPrec
 
 
 ------------------------------------------------------------------------------
-instance Show a => Show (Field (Pair s a)) where
+instance (Show (Val s), Show a) => Show (Field (Pair s a)) where
     showsPrec = showsField showsPrec
 
 
 ------------------------------------------------------------------------------
-instance Show a => Show (Option (Pair s a)) where
+instance (Show (Val s), Show a) => Show (Option (Pair s a)) where
     showsPrec = showsOption showsPrec showList
 
 
 ------------------------------------------------------------------------------
-readsLabeled :: forall a s f. KnownSymbol s
+readsLabeled :: forall a s f. (Known s, Eq (Val s), Read (Val s))
     => (Int -> ReadS (f a))
     -> Int
     -> (ReadS (Labeled f (Pair s a)))
 readsLabeled rp p = readParen (p > 6) $ \s -> do
-    ("$", s') <- lex s
-    (label, s'') <- readParen True (\s_ -> readList s_) s'
-    guard $ label == symbolVal (Proxy :: Proxy s)
-    (".=.", s''') <- lex s''
-    (value, s'''') <- rp 7 s'''
-    return $ (Labeled value, s'''')
+    ("at", s') <- lex s
+    ("@", s'') <- lex s'
+    (t, s''') <- readsPrec 11 s''
+    guard $ t == val (Proxy :: Proxy s)
+    (".=.", s'''') <- lex s'''
+    (value, s''''') <- rp 7 s''''
+    return $ (Labeled value, s''''')
 
 
 ------------------------------------------------------------------------------
-showsLabeled :: forall a s f. (Int -> f a -> ShowS)
+showsLabeled :: forall a s f. Show (Val s)
+    => (Int -> f a -> ShowS)
     -> Int
     -> Labeled f (Pair s a)
     -> ShowS
-showsLabeled sp p (Labeled a) = showParen (p > 6) $ showString "$("
-    . showList (symbolVal (Proxy :: Proxy s))
-    . showString ") .=. "
+showsLabeled sp p (Labeled a) = showParen (p > 6) $ showString "at @"
+    . showsPrec 11 (val (Proxy :: Proxy s))
+    . showString " .=. "
     . sp 7 a
 
 
 ------------------------------------------------------------------------------
-readsField :: forall a s. KnownSymbol s
+readsField :: forall a s. (Known s, Eq (Val s), Read (Val s))
     => (Int -> ReadS a)
     -> Int
     -> (ReadS (Field (Pair s a)))
 readsField rp p = readParen (p > 6) $ \s -> do
-    ("$", s') <- lex s
-    (label, s'') <- readParen True (\s_ -> readList s_) s'
-    guard $ label == symbolVal (Proxy :: Proxy s)
-    (".=", s''') <- lex s''
-    (value, s'''') <- rp 7 s'''
-    return $ (Labeled (Identity value), s'''')
+    ("at", s') <- lex s
+    ("@", s'') <- lex s'
+    (t, s''') <- readsPrec 11 s''
+    guard $ t == val (Proxy :: Proxy s)
+    (".=", s'''') <- lex s'''
+    (value, s''''') <- rp 7 s''''
+    return $ (Labeled (Identity value), s''''')
 
 
 ------------------------------------------------------------------------------
-showsField :: forall a s. (Int -> a -> ShowS)
+showsField :: forall a s. Show (Val s)
+    => (Int -> a -> ShowS)
     -> Int
     -> Field (Pair s a)
     -> ShowS
-showsField sp p (Labeled (Identity a)) = showParen (p > 6) $ showString "$("
-    . showList (symbolVal (Proxy :: Proxy s))
-    . showString ") .= "
+showsField sp p (Labeled (Identity a)) = showParen (p > 6) $ showString "at @"
+    . showsPrec 11 (val (Proxy :: Proxy s))
+    . showString " .= "
     . sp 7 a
 
 
 ------------------------------------------------------------------------------
-readsOption :: forall a s. KnownSymbol s
+readsOption :: forall a s. (Known s, Eq (Val s), Read (Val s))
     => (Int -> ReadS a)
     -> ReadS [a]
     -> Int
     -> (ReadS (Option (Pair s a)))
 readsOption rp rl p = readParen (p > 6) $ \s -> do
-    ("$", s') <- lex s
-    (label, s'') <- readParen True (\s_ -> readList s_) s'
-    guard $ label == symbolVal (Proxy :: Proxy s)
-    ("?=", s''') <- lex s''
-    (value, s'''') <- liftReadsPrec rp rl 7 s'''
-    return $ (Labeled (First value), s'''')
+    ("at", s') <- lex s
+    ("@", s'') <- lex s'
+    (t, s''') <- readsPrec 11 s''
+    guard $ t == val (Proxy :: Proxy s)
+    ("?=", s'''') <- lex s'''
+    (value, s''''') <- liftReadsPrec rp rl 7 s''''
+    return $ (Labeled (First value), s''''')
 
 
 ------------------------------------------------------------------------------
-showsOption :: forall a s. (Int -> a -> ShowS)
+showsOption :: forall a s. Show (Val s)
+    => (Int -> a -> ShowS)
     -> ([a] -> ShowS)
     -> Int
     -> Option (Pair s a)
     -> ShowS
-showsOption sp sl p (Labeled (First a)) = showParen (p > 6) $ showString "$("
-    . showList (symbolVal (Proxy :: Proxy s))
-    . showString ") ?= "
+showsOption sp sl p (Labeled (First a)) = showParen (p > 6)
+    $ showString "at @"
+    . showsPrec 11 (val (Proxy :: Proxy s))
+    . showString " ?= "
     . liftShowsPrec sp sl 7 a
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Bounded (f a)) => Bounded (Labeled f (Pair s a))
-  where
+instance (Known s, Bounded (f a)) => Bounded (Labeled f (Pair s a)) where
     minBound = Labeled minBound
     maxBound = Labeled maxBound
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Enum (f a)) => Enum (Labeled f (Pair s a)) where
+instance (Known s, Enum (f a)) => Enum (Labeled f (Pair s a)) where
     toEnum n = Labeled (toEnum n)
     fromEnum (Labeled a) = fromEnum a
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Ix (f a)) => Ix (Labeled f (Pair s a)) where
+instance (Known s, Ix (f a)) => Ix (Labeled f (Pair s a)) where
     range (Labeled a, Labeled b) = fmap Labeled $ range (a, b)
     index (Labeled a, Labeled b) (Labeled i) = index (a, b) i
     inRange (Labeled a, Labeled b) (Labeled i) = inRange (a, b) i
@@ -447,14 +456,13 @@ instance Semigroup (f a) => Semigroup (Labeled f (Pair s a)) where
 
 #endif
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Monoid (f a)) => Monoid (Labeled f (Pair s a)) where
+instance (Known s, Monoid (f a)) => Monoid (Labeled f (Pair s a)) where
     mempty = Labeled mempty
     mappend (Labeled a) (Labeled b) = Labeled (mappend a b)
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Storable (f a)) => Storable (Labeled f (Pair s a))
-  where
+instance (Known s, Storable (f a)) => Storable (Labeled f (Pair s a)) where
     sizeOf _ = sizeOf (undefined :: f a)
     alignment _ = alignment (undefined :: f a)
     peek = fmap Labeled . peek . castPtr
@@ -462,7 +470,16 @@ instance (KnownSymbol s, Storable (f a)) => Storable (Labeled f (Pair s a))
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Num (f a)) => Num (Labeled f (Pair s a)) where
+instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Num (f a)
+    )
+  =>
+    Num (Labeled f (Pair s a))
+  where
     (+) = lift2 (+)
     (-) = lift2 (-)
     (*) = lift2 (*)
@@ -473,12 +490,29 @@ instance (KnownSymbol s, Num (f a)) => Num (Labeled f (Pair s a)) where
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Real (f a)) => Real (Labeled f (Pair s a)) where
+instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Real (f a)
+    )
+  =>
+    Real (Labeled f (Pair s a))
+  where
     toRational (Labeled a) = toRational a
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Integral (f a)) => Integral (Labeled f (Pair s a))
+instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Integral (f a)
+    )
+  =>
+    Integral (Labeled f (Pair s a))
   where
     quot = lift2 quot
     rem = lift2 rem
@@ -494,7 +528,14 @@ instance (KnownSymbol s, Integral (f a)) => Integral (Labeled f (Pair s a))
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Fractional (f a)) =>
+instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Fractional (f a)
+    )
+  =>
     Fractional (Labeled f (Pair s a))
   where
     (/) = lift2 (/)
@@ -503,7 +544,15 @@ instance (KnownSymbol s, Fractional (f a)) =>
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Floating (f a)) => Floating (Labeled f (Pair s a))
+instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Floating (f a)
+    )
+  =>
+    Floating (Labeled f (Pair s a))
   where
     pi = Labeled pi
     exp = lift exp
@@ -526,7 +575,15 @@ instance (KnownSymbol s, Floating (f a)) => Floating (Labeled f (Pair s a))
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, RealFrac (f a)) => RealFrac (Labeled f (Pair s a))
+instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , RealFrac (f a)
+    )
+  =>
+    RealFrac (Labeled f (Pair s a))
   where
     properFraction (Labeled x) = (a, Labeled b)
       where
@@ -538,7 +595,15 @@ instance (KnownSymbol s, RealFrac (f a)) => RealFrac (Labeled f (Pair s a))
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, RealFloat (f a)) => RealFloat (Labeled f (Pair s a))
+instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , RealFloat (f a)
+    )
+  =>
+    RealFloat (Labeled f (Pair s a))
   where
     floatRadix (Labeled a) = floatRadix a
     floatDigits (Labeled a) = floatDigits a
@@ -557,7 +622,16 @@ instance (KnownSymbol s, RealFloat (f a)) => RealFloat (Labeled f (Pair s a))
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Bits (f a)) => Bits (Labeled f (Pair s a)) where
+instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Bits (f a)
+    )
+  =>
+    Bits (Labeled f (Pair s a))
+  where
     (.&.) = lift2 (.&.)
     (.|.) = lift2 (.|.)
     xor = lift2 xor
@@ -586,7 +660,7 @@ instance (KnownSymbol s, Bits (f a)) => Bits (Labeled f (Pair s a)) where
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, FiniteBits (f a)) =>
+instance (Known s, FiniteBits (f a)) =>
     FiniteBits (Labeled f (Pair s a))
   where
     finiteBitSize (Labeled a) = finiteBitSize a
@@ -598,8 +672,7 @@ instance (KnownSymbol s, FiniteBits (f a)) =>
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, IsString (f a)) => IsString (Labeled f (Pair s a))
-  where
+instance (Known s, IsString (f a)) => IsString (Labeled f (Pair s a)) where
     fromString = Labeled . fromString
 
 
@@ -608,11 +681,20 @@ instance (KnownSymbol s, IsString (f a)) => IsString (Labeled f (Pair s a))
 type LabeledMetaData = MetaData S.Labeled S.DataLabeled S.AnonymousData False
 type LabeledMetaCons = MetaCons S.Labeled PrefixI True
 type LabeledMetaSel s
-    = MetaSel (Just s) NoSourceUnpackedness SourceStrict DecidedStrict
+    = MetaSel (MaybeSymbol s) NoSourceUnpackedness SourceStrict DecidedStrict
+#ifdef ClosedTypeFamilies
+#define Ks KPoly1
+type family MaybeSymbol (s :: KPoly1) :: KMaybe (KString) where
+    MaybeSymbol s = Just s
+    MaybeSymbol _s = Nothing
+#else
+#define Ks KString
+type MaybeSymbol s = Just s
+#endif
 
 
 ------------------------------------------------------------------------------
-instance KnownSymbol s => Generic (Labeled f (Pair s a)) where
+instance Known s => Generic (Labeled f (Pair (s :: Ks) a)) where
     type Rep (Labeled f (Pair s a)) = D1 LabeledMetaData
         (C1 LabeledMetaCons (S1 (LabeledMetaSel s) (Rec0 (f a))))
     from (Labeled a) = M1 (M1 (M1 (K1 a)))
@@ -701,60 +783,115 @@ pattern Option1 a = Labeled1 a
 
 #endif
 ------------------------------------------------------------------------------
-deriving instance (KnownSymbol s, Bounded (f a)) => Bounded (Labeled1 f s a)
-deriving instance (KnownSymbol s, Enum (f a)) => Enum (Labeled1 f s a)
-deriving instance (KnownSymbol s, Ix (f a)) => Ix (Labeled1 f s a)
-deriving instance (KnownSymbol s, Storable (f a)) => Storable (Labeled1 f s a)
-deriving instance (KnownSymbol s, Monoid (f a)) => Monoid (Labeled1 f s a)
-deriving instance (KnownSymbol s, Num (f a)) => Num (Labeled1 f s a)
-deriving instance (KnownSymbol s, Real (f a)) => Real (Labeled1 f s a)
-deriving instance (KnownSymbol s, Integral (f a)) => Integral (Labeled1 f s a)
-deriving instance (KnownSymbol s, Fractional (f a)) =>
-    Fractional (Labeled1 f s a)
-deriving instance (KnownSymbol s, Floating (f a)) => Floating (Labeled1 f s a)
-deriving instance (KnownSymbol s, RealFrac (f a)) => RealFrac (Labeled1 f s a)
-deriving instance (KnownSymbol s, RealFloat (f a)) =>
-    RealFloat (Labeled1 f s a)
-deriving instance (KnownSymbol s, Bits (f a)) => Bits (Labeled1 f s a)
-#if MIN_VERSION_base(4, 7, 0)
-deriving instance (KnownSymbol s, FiniteBits (f a)) =>
-    FiniteBits (Labeled1 f s a)
+deriving instance (Known s, Bounded (f a)) => Bounded (Labeled1 f s a)
+deriving instance (Known s, Enum (f a)) => Enum (Labeled1 f s a)
+deriving instance (Known s, Ix (f a)) => Ix (Labeled1 f s a)
+deriving instance (Known s, Storable (f a)) => Storable (Labeled1 f s a)
+deriving instance (Known s, Monoid (f a)) => Monoid (Labeled1 f s a)
+deriving instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
 #endif
-deriving instance (KnownSymbol s, IsString (f a)) => IsString (Labeled1 f s a)
+    , Num (f a)
+    )
+  => Num (Labeled1 f s a)
+deriving instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Real (f a)
+    )
+  => Real (Labeled1 f s a)
+deriving instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Integral (f a)
+    )
+  => Integral (Labeled1 f s a)
+deriving instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Fractional (f a)
+    )
+  => Fractional (Labeled1 f s a)
+deriving instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Floating (f a)
+    )
+  => Floating (Labeled1 f s a)
+deriving instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , RealFrac (f a)
+    )
+  => RealFrac (Labeled1 f s a)
+deriving instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , RealFloat (f a)
+    )
+  => RealFloat (Labeled1 f s a)
+deriving instance
+    ( Known s
+#if !MIN_VERSION_base(4, 5, 0)
+    , Show (Val s)
+#endif
+    , Bits (f a)
+    )
+  => Bits (Labeled1 f s a)
+#if MIN_VERSION_base(4, 7, 0)
+deriving instance (Known s, FiniteBits (f a)) => FiniteBits (Labeled1 f s a)
+#endif
+deriving instance (Known s, IsString (f a)) => IsString (Labeled1 f s a)
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__ (KnownSymbol s, Read (f a)) => Read (Labeled1 f s a)
+instance __OVERLAPPABLE__ (Known s, Eq (Val s), Read (Val s), Read (f a)) =>
+    Read (Labeled1 f s a)
   where
     readsPrec = readsData $
         readsUnaryWith (readsLabeled readsPrec) "Labeled1" Labeled1
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Read a) => Read (Field1 s a)
+instance (Known s, Eq (Val s), Read (Val s), Read a) => Read (Field1 s a)
   where
     readsPrec = readsPrec1
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Read a) => Read (Option1 s a)
+instance (Known s, Eq (Val s), Read (Val s), Read a) => Read (Option1 s a)
   where
     readsPrec = readsPrec1
 
 
 ------------------------------------------------------------------------------
-instance __INCOHERENT__ Show (f a) => Show (Labeled1 f s a) where
+instance __INCOHERENT__ (Show (Val s), Show (f a)) => Show (Labeled1 f s a)
+  where
     showsPrec p (Labeled1 a) =
         showsUnaryWith (showsLabeled showsPrec) "Labeled1" p a
 
 
 ------------------------------------------------------------------------------
-instance Show a => Show (Field1 s a) where
+instance (Show (Val s), Show a) => Show (Field1 s a) where
     showsPrec = showsPrec1
 
 
 ------------------------------------------------------------------------------
-instance Show a => Show (Option1 s a) where
+instance (Show (Val s), Show a) => Show (Option1 s a) where
     showsPrec = showsPrec1
 #ifdef GenericDeriving
 
@@ -767,7 +904,7 @@ type Labeled1MetaSel
 
 
 ------------------------------------------------------------------------------
-instance KnownSymbol s => Generic (Labeled1 f s a) where
+instance Known s => Generic (Labeled1 f (s :: Ks) a) where
     type Rep (Labeled1 f s a) = D1 Labeled1MetaData (C1 Labeled1MetaCons
         (S1 Labeled1MetaSel (Rep (Labeled f (Pair s a)))))
     from (Labeled1 a) = M1 (M1 (M1 (from a)))
@@ -775,7 +912,7 @@ instance KnownSymbol s => Generic (Labeled1 f s a) where
 
 
 ------------------------------------------------------------------------------
-instance KnownSymbol s => Generic1 (Labeled1 f s) where
+instance Known s => Generic1 (Labeled1 f (s :: Ks)) where
     type Rep1 (Labeled1 f s) =
         D1 Labeled1MetaData (C1 Labeled1MetaCons (S1 Labeled1MetaSel
         (D1 LabeledMetaData (C1 LabeledMetaCons (S1 (LabeledMetaSel s)
@@ -797,7 +934,8 @@ instance Ord1 f => Ord1 (Labeled1 f s) where
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__ (KnownSymbol s, Read1 f) => Read1 (Labeled1 f s)
+instance __OVERLAPPABLE__ (Known s, Eq (Val s), Read (Val s), Read1 f) =>
+    Read1 (Labeled1 f s)
   where
     liftReadsPrec rp rl = readsData $
         readsUnaryWith (readsLabeled (liftReadsPrec rp rl))
@@ -806,7 +944,7 @@ instance __OVERLAPPABLE__ (KnownSymbol s, Read1 f) => Read1 (Labeled1 f s)
 
 
 ------------------------------------------------------------------------------
-instance KnownSymbol s => Read1 (Field1 s) where
+instance (Known s, Eq (Val s), Read (Val s)) => Read1 (Field1 s) where
     liftReadsPrec rp rl p s = msum
         [ readsData (readsUnaryWith (readsField rp) "Field1" Labeled1) p s
         , readsData
@@ -819,7 +957,7 @@ instance KnownSymbol s => Read1 (Field1 s) where
 
 
 ------------------------------------------------------------------------------
-instance KnownSymbol s => Read1 (Option1 s) where
+instance (Known s, Eq (Val s), Read (Val s)) => Read1 (Option1 s) where
     liftReadsPrec rp rl p s = msum
         [ readsData
             (readsUnaryWith (readsOption rp rl) "Option1" Labeled1)
@@ -838,19 +976,19 @@ instance KnownSymbol s => Read1 (Option1 s) where
 
 
 ------------------------------------------------------------------------------
-instance __INCOHERENT__ Show1 f => Show1 (Labeled1 f s) where
+instance __INCOHERENT__ (Show (Val s), Show1 f) => Show1 (Labeled1 f s) where
     liftShowsPrec sp sl p (Labeled1 a) =
         showsUnaryWith (showsLabeled (liftShowsPrec sp sl)) "Labeled1" p a
 
 
 ------------------------------------------------------------------------------
-instance Show1 (Field1 s) where
+instance Show (Val s) => Show1 (Field1 s) where
     liftShowsPrec sp _ p (Labeled1 a) =
         showsUnaryWith (showsField sp) "Field1" p a
 
 
 ------------------------------------------------------------------------------
-instance Show1 (Option1 s) where
+instance Show (Val s) => Show1 (Option1 s) where
     liftShowsPrec sp sl p (Labeled1 a) =
         showsUnaryWith (showsOption sp sl) "Option1" p a
 
@@ -874,7 +1012,7 @@ instance Traversable f => Traversable (Labeled1 f s) where
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Applicative f) => Applicative (Labeled1 f s) where
+instance (Known s, Applicative f) => Applicative (Labeled1 f s) where
     pure = Labeled1 . Labeled . pure
     {-# INLINE pure #-}
     Labeled1 (Labeled f) <*> Labeled1 (Labeled a) =
@@ -883,14 +1021,14 @@ instance (KnownSymbol s, Applicative f) => Applicative (Labeled1 f s) where
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Alternative f) => Alternative (Labeled1 f s) where
+instance (Known s, Alternative f) => Alternative (Labeled1 f s) where
     empty = Labeled1 (Labeled empty)
     Labeled1 (Labeled a) <|> Labeled1 (Labeled b) =
         Labeled1 (Labeled (a <|> b))
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Monad f) => Monad (Labeled1 f s) where
+instance (Known s, Monad f) => Monad (Labeled1 f s) where
     return = Labeled1 . Labeled . return
     {-# INLINE return #-}
     Labeled1 (Labeled a) >>= f = Labeled1 $ Labeled $ a >>= unwrap . f
@@ -898,13 +1036,13 @@ instance (KnownSymbol s, Monad f) => Monad (Labeled1 f s) where
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, MonadPlus f) => MonadPlus (Labeled1 f s) where
+instance (Known s, MonadPlus f) => MonadPlus (Labeled1 f s) where
     mzero = Labeled1 (Labeled mzero)
     mplus (Labeled1 (Labeled a)) (Labeled1 (Labeled b)) =
         Labeled1 (Labeled (mplus a b))
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, MonadFix f) => MonadFix (Labeled1 f s) where
+instance (Known s, MonadFix f) => MonadFix (Labeled1 f s) where
     mfix f = Labeled1 $ Labeled $ mfix (unwrap . f)
     {-# INLINE mfix #-}
 
@@ -917,7 +1055,7 @@ unwrap (Labeled1 (Labeled a)) = a
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, MonadZip f) => MonadZip (Labeled1 f s) where
+instance (Known s, MonadZip f) => MonadZip (Labeled1 f s) where
     munzip (Labeled1 (Labeled a)) = Labeled1 . Labeled *** Labeled1 . Labeled
         $ munzip a
     {-# INLINE munzip #-}

@@ -44,6 +44,13 @@
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
 #endif
 
+#if __GLASGOW_HASKELL__ >= 702 && __GLASGOW_HASKELL__ < 704
+-- I don't know why, but at some point GHC 7.2 (and only 7.2) seems to have
+-- completely lost the ability infer that the constructor of `Product f Nil`
+-- must be `Nil` because GADTs (specifically in this file)
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
+#endif
+
 module Data.Anonymous.Product
     ( Product (Cons, Nil)
     , Tuple
@@ -205,11 +212,13 @@ import qualified Type.List.Fields as T
 
 -- base ----------------------------------------------------------------------
 import           Control.Applicative
-                     ( Applicative
-                     , Const (Const)
+                     ( Const (Const)
+#if !MIN_VERSION_base(4, 8, 0)
+                     , Applicative
                      , (<$>)
                      , (<*>)
                      , pure
+#endif
                      )
 import           Control.Monad (guard, msum)
 import           Data.Bits
@@ -255,6 +264,7 @@ import           Data.Bits
                      , zeroBits
 #endif
                      )
+import           Data.Char (isAlphaNum)
 import           Data.Functor.Identity (Identity (Identity))
 import           Data.Ix (Ix, inRange, range)
 import qualified Data.Ix (index)
@@ -303,16 +313,12 @@ import           GHC.Generics.Compat
 #endif
 import           GHC.TypeLits.Compat
                      ( (:-)
-                     , KnownSymbol
 #ifdef DataPolyKinds
                      , Nat
-#ifdef ClosedTypeFamilies
                      , Symbol
-#endif
 #endif
                      , One
                      , Zero
-                     , symbolVal
                      )
 #ifdef GenericDeriving
 import           Type.Bool (False, True)
@@ -321,7 +327,7 @@ import           Type.List (Cons, Nil)
 #ifdef GenericDeriving
 import           Type.Maybe (Just, Nothing)
 #endif
-import           Type.Meta (Proxy (Proxy))
+import           Type.Meta (Known, Val, val, Proxy (Proxy))
 #if __GLASGOW_HASKELL__ < 700
 import           Type.Natural (Natural)
 #endif
@@ -516,7 +522,7 @@ instance __OVERLAPPABLE__ (Read b, ReadHelper (Const b) as) =>
 
 
 ------------------------------------------------------------------------------
-instance (Read a, KnownSymbol s) =>
+instance (Known s, ReadsVal (Val s), Read a) =>
     ReadHelper Field (Cons (Pair s a) Nil)
   where
     readsHelper f s = do
@@ -526,7 +532,9 @@ instance (Read a, KnownSymbol s) =>
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__ (Read a, KnownSymbol s, ReadHelper Field as) =>
+instance __OVERLAPPABLE__
+    (Known s, ReadsVal (Val s), Read a, ReadHelper Field as)
+  =>
     ReadHelper Field (Cons (Pair s a) as)
   where
     readsHelper f s = do
@@ -537,7 +545,8 @@ instance __OVERLAPPABLE__ (Read a, KnownSymbol s, ReadHelper Field as) =>
 
 
 ------------------------------------------------------------------------------
-instance (Read a, KnownSymbol s) => ReadHelper Option (Cons (Pair s a) Nil)
+instance (Known s, ReadsVal (Val s), Read a) =>
+    ReadHelper Option (Cons (Pair s a) Nil)
   where
     readsHelper f s = do
         ((_, a), s') <- readsOption f s
@@ -545,13 +554,44 @@ instance (Read a, KnownSymbol s) => ReadHelper Option (Cons (Pair s a) Nil)
 
 
 ------------------------------------------------------------------------------
-instance __OVERLAPPABLE__ (Read a, KnownSymbol s, ReadHelper Option as) =>
+instance __OVERLAPPABLE__
+    (Known s, ReadsVal (Val s), Read a, ReadHelper Option as)
+  =>
     ReadHelper Option (Cons (Pair s a) as)
   where
     readsHelper f s = do
         ((f', a), s') <- readsOption f s
         (as, s'') <- readsHelper f' s'
         return (Cons a as, s'')
+
+
+------------------------------------------------------------------------------
+class ReadsVal a where
+    readsVal :: (Known s, Val s ~ a) => proxy s -> ReadS a
+
+
+------------------------------------------------------------------------------
+instance ReadsVal String where
+    readsVal p s = msum
+        [ do
+            (t, s') <- lex s
+            guard $ t == val p
+            return (t, s')
+        , do
+            ("@", s') <- lex s
+            (t, s'') <- readsPrec 11 s'
+            guard $ t == val p
+            return (t, s'')
+        ]
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__ (Eq a, Read a) => ReadsVal a where
+    readsVal p s = do
+        ("@", s') <- lex s
+        (t, s'') <- readsPrec 11 s'
+        guard $ t == val p
+        return (t, s'')
 
 
 ------------------------------------------------------------------------------
@@ -567,25 +607,23 @@ readsComma s = do
 
 
 ------------------------------------------------------------------------------
-readsField :: forall a s. (Read a, KnownSymbol s)
+readsField :: forall a s. (Known s, ReadsVal (Val s), Read a)
     => ReadS (Field (Pair s a))
 readsField s = do
-    (label_, s') <- lex s
-    guard $ label_ == symbolVal (Proxy :: Proxy s)
+    (_, s') <- readsVal (Proxy :: Proxy s) s
     ("=", s'') <- lex s'
     (a, s''') <- readsPrec 0 s''
     return $ (Labeled (Identity a), s''')
 
 
 ------------------------------------------------------------------------------
-readsOption :: forall a s. (Read a, KnownSymbol s)
+readsOption :: forall a s. (Known s, ReadsVal (Val s), Read a)
     => ReadS ()
     -> (ReadS (ReadS (), Option (Pair s a)))
 readsOption f s = msum
     [ do
         ((), s') <- f s
-        (label_, s'') <- lex s'
-        guard $ label_ == symbolVal (Proxy :: Proxy s)
+        (_, s'') <- readsVal (Proxy :: Proxy s) s'
         ("=", s''') <- lex s''
         (a, s'''') <- readsPrec 0 s'''
         (_, s''''') <- f s''''
@@ -677,8 +715,11 @@ instance (Show b, ShowHelper (Const b) as) =>
         . showsHelper showsComma as
 
 
+#if __GLASGOW_HASKELL__ < 700
+#define ShowsVal String ~
+#endif
 ------------------------------------------------------------------------------
-instance (Show a, ShowHelper Field as) =>
+instance (ShowsVal (Val s), Show a, ShowHelper Field as) =>
     ShowHelper Field (Cons (Pair s a) as)
   where
     showsHelper f (Cons a Nil) = f . showsField a
@@ -687,7 +728,7 @@ instance (Show a, ShowHelper Field as) =>
 
 
 ------------------------------------------------------------------------------
-instance (Show a, ShowHelper Option as) =>
+instance (ShowsVal (Val s), Show a, ShowHelper Option as) =>
     ShowHelper Option (Cons (Pair s a) as)
   where
     showsHelper f (Cons a Nil) = snd $ showsOption a f
@@ -695,6 +736,36 @@ instance (Show a, ShowHelper Option as) =>
         s . showsHelper f' as
 
 
+#if __GLASGOW_HASKELL__ < 700
+-- GHC 6.12 is really stupid, let's just assume that Val s ~ String there
+------------------------------------------------------------------------------
+showsVal :: (Known s, Val s ~ String) => proxy s -> ShowS
+showsVal p
+    | all (\s -> isAlphaNum s || s == '_' || s == '\'') t = showString t
+    | otherwise = showString "@" . showsPrec 11 t
+  where
+    t = val p
+#else
+------------------------------------------------------------------------------
+class ShowsVal a where
+    showsVal :: (Known s, Val s ~ a) => proxy s -> ShowS
+
+
+------------------------------------------------------------------------------
+instance ShowsVal String where
+    showsVal p
+        | all (\s -> isAlphaNum s || s == '_' || s == '\'') t = showString t
+        | otherwise = showString "@" . showsPrec 11 t
+      where
+        t = val p
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__ Show a => ShowsVal a where
+    showsVal p = showString "@" . showsPrec 11 (val p)
+
+
+#endif
 ------------------------------------------------------------------------------
 showsComma :: ShowS
 showsComma = showString ", "
@@ -702,22 +773,21 @@ showsComma = showString ", "
 
 
 ------------------------------------------------------------------------------
-showsField :: forall a s. Show a => Field (Pair s a) -> ShowS
+showsField :: forall a s. (ShowsVal (Val s), Show a)
+    => Field (Pair s a) -> ShowS
 showsField (Labeled (Identity a)) = foldr (.) id $
-    [ showString $ symbolVal (Proxy :: Proxy s)
+    [ showsVal (Proxy :: Proxy s)
     , showString " = "
     , showsPrec 0 a
     ]
 
 
 ------------------------------------------------------------------------------
-showsOption :: forall a s. Show a
-    => Option (Pair s a)
-    -> ShowS
-    -> (ShowS, ShowS)
+showsOption :: forall a s. (ShowsVal (Val s), Show a)
+    => Option (Pair s a) -> ShowS -> (ShowS, ShowS)
 showsOption (Labeled (First (Just a))) f = (showsComma, foldr (.) id $
     [ f
-    , showString $ symbolVal (Proxy :: Proxy s)
+    , showsVal (Proxy :: Proxy s)
     , showString " = "
     , showsPrec 0 a
     ])
@@ -1093,7 +1163,16 @@ type MetaTupleSel =
 
 ------------------------------------------------------------------------------
 type MetaRecordSel s =
-    MetaSel (Just s) NoSourceUnpackedness SourceStrict DecidedStrict
+    MetaSel (MaybeSymbol s) NoSourceUnpackedness SourceStrict DecidedStrict
+#ifdef ClosedTypeFamilies
+#define Ks KPoly1
+type family MaybeSymbol (s :: KPoly1) :: KMaybe (KString) where
+    MaybeSymbol s = Just s
+    MaybeSymbol _s = Nothing
+#else
+#define Ks KString
+type MaybeSymbol s = Just s
+#endif
 
 
 ------------------------------------------------------------------------------
@@ -1134,11 +1213,12 @@ type instance
 #ifndef ClosedTypeFamilies
 type instance
 #endif
-    Selectors Field (Cons (Pair s a) Nil) = S1 (MetaRecordSel s) (Rec0 a)
+    Selectors Field (Cons (Pair (s :: Ks) a) Nil) =
+        S1 (MetaRecordSel s) (Rec0 a)
 #ifndef ClosedTypeFamilies
 type instance
 #endif
-    Selectors Field (Cons (Pair s a) (Cons a' as)) =
+    Selectors Field (Cons (Pair (s :: Ks) a) (Cons a' as)) =
         S1 (MetaRecordSel s) (Rec0 a) :*: Selectors Field (Cons a' as)
 #ifndef ClosedTypeFamilies
 type instance
@@ -1147,12 +1227,12 @@ type instance
 #ifndef ClosedTypeFamilies
 type instance
 #endif
-    Selectors Option (Cons (Pair s a) Nil) =
+    Selectors Option (Cons (Pair (s :: Ks) a) Nil) =
         S1 (MetaRecordSel s) (Rec0 (Maybe a))
 #ifndef ClosedTypeFamilies
 type instance
 #endif
-    Selectors Option (Cons (Pair s a) (Cons a' as)) =
+    Selectors Option (Cons (Pair (s :: Ks) a) (Cons a' as)) =
         S1 (MetaRecordSel s) (Rec0 (Maybe a)) :*:
             Selectors Option (Cons a' as)
 #ifdef ClosedTypeFamilies
@@ -1197,7 +1277,7 @@ type instance
 #endif
     Constructors Option = C1 MetaRecordCons
 #ifdef ClosedTypeFamilies
-    Constructors (f :: KPair (KString, KPoly2) -> *) = C1 MetaRecordCons
+    Constructors (f :: KPair (KPoly1, KPoly2) -> *) = C1 MetaRecordCons
     Constructors f = C1 MetaTupleCons
 #endif
 
@@ -1264,14 +1344,14 @@ instance SGeneric Field Nil where
 
 
 ------------------------------------------------------------------------------
-instance KnownSymbol s => SGeneric Field (Cons (Pair s a) Nil) where
+instance Known s => SGeneric Field (Cons (Pair (s :: Ks) a) Nil) where
     sto (M1 (K1 a)) = Cons (Labeled (Identity a)) Nil
     sfrom (Cons (Labeled (Identity a)) _) = M1 (K1 a)
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, SGeneric Field (Cons a' as)) =>
-    SGeneric Field (Cons (Pair s a) (Cons a' as))
+instance (Known s, SGeneric Field (Cons a' as)) =>
+    SGeneric Field (Cons (Pair (s :: Ks) a) (Cons a' as))
   where
     sto (M1 (K1 a) :*: as) = Cons (Labeled (Identity a)) (sto as)
     sfrom (Cons (Labeled (Identity a)) as) = M1 (K1 a) :*: sfrom as
@@ -1284,14 +1364,14 @@ instance SGeneric Option Nil where
 
 
 ------------------------------------------------------------------------------
-instance KnownSymbol s => SGeneric Option (Cons (Pair s a) Nil) where
+instance Known s => SGeneric Option (Cons (Pair (s :: Ks) a) Nil) where
     sto (M1 (K1 a)) = Cons (Labeled (First a)) Nil
     sfrom (Cons (Labeled (First a)) _) = M1 (K1 a)
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, SGeneric Option (Cons a' as)) =>
-    SGeneric Option (Cons (Pair s a) (Cons a' as))
+instance (Known s, SGeneric Option (Cons a' as)) =>
+    SGeneric Option (Cons (Pair (s :: Ks) a) (Cons a' as))
   where
     sto (M1 (K1 a) :*: as) = Cons (Labeled (First a)) (sto as)
     sfrom (Cons (Labeled (First a)) as) = M1 (K1 a) :*: sfrom as
@@ -1459,7 +1539,7 @@ infixr 5 .:
 
 
 ------------------------------------------------------------------------------
-(.=:) :: forall s a as. KnownSymbol s
+(.=:) :: forall s a as. Known s
     => a
     -> Record as
     -> Record (Cons (Pair s a) as)
@@ -1468,7 +1548,7 @@ infixr 5 .=:
 
 
 ------------------------------------------------------------------------------
-(?=:) :: forall s a as. KnownSymbol s
+(?=:) :: forall s a as. Known s
     => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
@@ -1490,7 +1570,7 @@ infixr 5 :::
 
 
 ------------------------------------------------------------------------------
-pattern (:.=:) :: forall s a as. KnownSymbol s
+pattern (:.=:) :: forall s a as. Known s
     => a
     -> Record as
     -> Record (Cons (Pair s a) as)
@@ -1499,7 +1579,7 @@ infixr 5 :.=:
 
 
 ------------------------------------------------------------------------------
-pattern (:?=:) :: forall s a as. KnownSymbol s
+pattern (:?=:) :: forall s a as. Known s
     => Maybe a
     -> Options as
     -> Options (Cons (Pair s a) as)
@@ -1601,7 +1681,7 @@ instance Label Nil where
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, Label as) => Label (Cons (Pair s a) as) where
+instance (Known s, Label as) => Label (Cons (Pair s a) as) where
     label (Cons a as) = Cons (Labeled a) (label as)
 #if __GLASGOW_HASKELL__ < 800
     label _ = undefined
