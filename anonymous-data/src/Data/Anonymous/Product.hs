@@ -44,13 +44,6 @@
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
 #endif
 
-#if __GLASGOW_HASKELL__ >= 702 && __GLASGOW_HASKELL__ < 704
--- I don't know why, but at some point GHC 7.2 (and only 7.2) seems to have
--- completely lost the ability infer that the constructor of `Product f Nil`
--- must be `Nil` because GADTs (specifically in this file)
-{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
-#endif
-
 module Data.Anonymous.Product
     ( Product (Cons, Nil)
     , Tuple
