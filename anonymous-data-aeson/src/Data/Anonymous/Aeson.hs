@@ -5,6 +5,7 @@
 {-# LANGUAGE IncoherentInstances #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -49,23 +50,22 @@ import           Control.Applicative
 #if !MIN_VERSION_base(4, 8, 0)
                        (<$>)
                      , (<*>)
+                     , pure
                      ,
 #endif
                        empty
                      , (<|>)
-                     , pure
                      )
 import           Data.Functor.Identity (Identity (Identity))
 
 
 -- text ----------------------------------------------------------------------
-import           Data.Text (pack)
+import           Data.Text (Text, pack)
 
 
 -- types ---------------------------------------------------------------------
-import           GHC.TypeLits.Compat (KnownSymbol, symbolVal)
 import           Type.List (Cons, Nil)
-import           Type.Meta (Proxy (Proxy))
+import           Type.Meta (Known, Val, val, Proxy (Proxy))
 import           Type.Tuple.Pair (Pair)
 
 
@@ -77,16 +77,39 @@ import qualified Data.HashMap.Lazy as H (insert)
 import qualified Data.Vector as V (cons, empty, head, null, tail)
 
 
+#if __GLASGOW_HASKELL__ < 700
+#define Key String ~ 
+key :: (Known s, Val s ~ String) => Proxy s -> Text
+key = pack . val
+#else
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, FromJSON (f a)) => FromJSON (Labeled f (Pair s a))
+class Key a where
+    key :: (Known s, Val s ~ a) => Proxy s -> Text
+
+
+------------------------------------------------------------------------------
+instance Key String where
+    key = pack . val
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPABLE__ Show a => Key a where
+    key = pack . show . val
+
+
+#endif
+------------------------------------------------------------------------------
+instance (Known s, Key (Val s), FromJSON (f a)) =>
+    FromJSON (Labeled f (Pair s a))
   where
     parseJSON (Object h) =
-        Labeled <$> h .: pack (symbolVal (Proxy :: Proxy s))
+        Labeled <$> h .: key (Proxy :: Proxy s)
     parseJSON _ = empty
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, FromJSON (f a)) => FromJSON (Labeled1 f s a) where
+instance (Known s, Key (Val s), FromJSON (f a)) => FromJSON (Labeled1 f s a)
+  where
     parseJSON = fmap Labeled1 . parseJSON
 
 
@@ -116,25 +139,24 @@ instance __OVERLAPPING__ FromJSON a => FromJSON (Tuple (Cons a Nil)) where
 
 ------------------------------------------------------------------------------
 instance __OVERLAPPING__
-    (KnownSymbol s, FromJSON (f a), FromJSON (Product (Labeled f) as))
+    (Known s, Key (Val s), FromJSON (f a), FromJSON (Product (Labeled f) as))
   =>
     FromJSON (Product (Labeled f) (Cons (Pair s a) as))
   where
     parseJSON (Array v) | not (V.null v) =
         Cons <$> parseJSON (V.head v) <*> parseJSON (Array (V.tail v))
     parseJSON j@(Object h) = do
-        Cons <$> fmap Labeled (h .: pack (symbolVal (Proxy :: Proxy s)))
-            <*> parseJSON j
+        Cons <$> fmap Labeled (h .: key (Proxy :: Proxy s)) <*> parseJSON j
     parseJSON _ = empty
 
 
 ------------------------------------------------------------------------------
-instance ToJSON (f a) => ToJSON (Labeled f (Pair s a)) where
-    toJSON (Labeled a) = object [pack (symbolVal (Proxy :: Proxy s)) .= a]
+instance (ToJSON (f a), Key (Val s)) => ToJSON (Labeled f (Pair s a)) where
+    toJSON (Labeled a) = object [key (Proxy :: Proxy s) .= a]
 
 
 ------------------------------------------------------------------------------
-instance ToJSON (f a) => ToJSON (Labeled1 f s a) where
+instance (ToJSON (f a), Key (Val s)) => ToJSON (Labeled1 f s a) where
     toJSON (Labeled1 a) = toJSON a
 
 
@@ -160,20 +182,27 @@ instance __INCOHERENT__ (ToJSON (f a), ToJSON (Product f as)) =>
 ------------------------------------------------------------------------------
 instance ToJSON a => ToJSON (Tuple (Cons a Nil)) where
     toJSON (Cons (Identity a) Nil) = toJSON a
+#if __GLASGOW_HASKELL__ < 800
+    toJSON _ = undefined
+#endif
 
 
 ------------------------------------------------------------------------------
 instance (ToJSON a, ToJSON b) => ToJSON (Tuple (Cons a (Cons b Nil))) where
     toJSON (Cons (Identity a) (Cons (Identity b) Nil)) =
         Array (V.cons (toJSON a) (V.cons (toJSON b) V.empty))
+#if __GLASGOW_HASKELL__ < 800
+    toJSON _ = undefined
+#endif
 
 
 ------------------------------------------------------------------------------
-instance (KnownSymbol s, ToJSON (f a), ToJSON (Product (Labeled f) as)) =>
+instance (Known s, Key (Val s), ToJSON (f a), ToJSON (Product (Labeled f) as))
+  =>
     ToJSON (Product (Labeled f) (Cons (Pair s a) as))
   where
     toJSON (Cons (Labeled a) as) = case toJSON as of
         Array v -> Array (V.cons (toJSON a) v)
         Object h -> Object $
-            H.insert (pack (symbolVal (Proxy :: Proxy s))) (toJSON a) h
+            H.insert (key (Proxy :: Proxy s)) (toJSON a) h
         x -> x
