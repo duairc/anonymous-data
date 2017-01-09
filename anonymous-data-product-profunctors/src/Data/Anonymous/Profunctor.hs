@@ -47,8 +47,8 @@ import           Data.Profunctor (Profunctor, dimap)
 
 
 -- types ---------------------------------------------------------------------
-import           GHC.TypeLits.Compat (KnownSymbol)
 import           Type.List (Cons, Nil)
+import           Type.Meta (Known)
 import           Type.Tuple.Pair (Pair)
 
 
@@ -84,7 +84,7 @@ instance
 instance
     ( ProductProfunctor p
     , ProductAdaptor p Field abs as bs
-    , KnownSymbol s
+    , Known s
     )
   =>
     ProductAdaptor p Field
@@ -132,7 +132,7 @@ instance
 
 
 ------------------------------------------------------------------------------
-instance (Profunctor p, Default p (f a) (f b), KnownSymbol s) =>
+instance (Profunctor p, Default p (f a) (f b), Known s) =>
     Default p (Labeled f (Pair s a)) (Labeled f (Pair s b))
   where
     def = dimap (\(Labeled a) -> a) Labeled (def :: p (f a) (f b))
