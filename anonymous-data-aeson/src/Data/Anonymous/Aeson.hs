@@ -37,6 +37,32 @@ import           Data.Aeson
                      , parseJSON
                      , toJSON
                      )
+#if MIN_VERSION_aeson(1, 0, 0)
+import           Data.Aeson.Types
+                     ( FromJSONKey
+                     , FromJSONKeyFunction
+                        ( FromJSONKeyCoerce
+                        , FromJSONKeyText
+                        , FromJSONKeyTextParser
+                        , FromJSONKeyValue
+                        )
+                     , Parser
+                     , ToJSONKey
+                     , ToJSONKeyFunction
+                        ( ToJSONKeyText
+                        , ToJSONKeyValue
+                        )
+                     , Value (String)
+                     , contramapToJSONKeyFunction
+                     , fromJSONKey
+                     , fromJSONKeyList
+                     , listParser
+                     , listValue
+                     , toEncoding
+                     , toJSONKey
+                     , toJSONKeyList
+                     )
+#endif
 
 
 -- anonymous-data ------------------------------------------------------------
@@ -57,6 +83,9 @@ import           Control.Applicative
                      , (<|>)
                      )
 import           Data.Functor.Identity (Identity (Identity))
+#if MIN_VERSION_aeson(1, 0, 0)
+import           Unsafe.Coerce (unsafeCoerce)
+#endif
 
 
 -- text ----------------------------------------------------------------------
@@ -70,11 +99,11 @@ import           Type.Tuple.Pair (Pair)
 
 
 -- unordered-containers ------------------------------------------------------
-import qualified Data.HashMap.Lazy as H (insert)
+import qualified Data.HashMap.Lazy as H
 
 
 -- vector --------------------------------------------------------------------
-import qualified Data.Vector as V (cons, empty, head, null, tail)
+import qualified Data.Vector as V
 
 
 #if __GLASGOW_HASKELL__ < 700
@@ -148,6 +177,106 @@ instance __OVERLAPPING__
     parseJSON j@(Object h) = do
         Cons <$> fmap Labeled (h .: key (Proxy :: Proxy s)) <*> parseJSON j
     parseJSON _ = empty
+#if MIN_VERSION_aeson(1, 0, 0)
+
+
+------------------------------------------------------------------------------
+instance (Known s, Key (Val s), FromJSONKey (f a)) =>
+    FromJSONKey (Labeled f (Pair s a))
+  where
+    fromJSONKey = fmap Labeled fromJSONKey
+    fromJSONKeyList = fmap (map Labeled) fromJSONKeyList
+
+
+------------------------------------------------------------------------------
+instance (Known s, Key (Val s), FromJSONKey (f a)) =>
+    FromJSONKey (Labeled1 f s a)
+  where
+    fromJSONKey = fmap (Labeled1 . Labeled) fromJSONKey
+    fromJSONKeyList = fmap (map (Labeled1 . Labeled)) fromJSONKeyList
+
+
+------------------------------------------------------------------------------
+instance FromJSONKey (Product f Nil) where
+    fromJSONKey = FromJSONKeyValue parseJSON
+    fromJSONKeyList = FromJSONKeyValue parseJSON
+
+
+------------------------------------------------------------------------------
+instance
+    ( FromJSONKey (f a)
+    , FromJSONKey (Product f as)
+    )
+  =>
+    FromJSONKey (Product f (Cons a as))
+  where
+    fromJSONKey = FromJSONKeyValue parseJSONKeyTuple
+    fromJSONKeyList = FromJSONKeyValue (listParser parseJSONKeyTuple)
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPING__ FromJSONKey a => FromJSONKey (Tuple (Cons a Nil))
+  where
+    fromJSONKey = fmap (\a -> Cons (Identity a) Nil) fromJSONKey
+    fromJSONKeyList = fmap (map (\a -> Cons (Identity a) Nil)) fromJSONKeyList
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPING__
+    ( Known s
+    , Key (Val s)
+    , FromJSONKey (f a)
+    , FromJSONKey (Product (Labeled f) as)
+    )
+  =>
+    FromJSONKey (Product (Labeled f) (Cons (Pair s a) as))
+  where
+    fromJSONKey = FromJSONKeyValue parseJSONKeyRecord
+    fromJSONKeyList = FromJSONKeyValue (listParser parseJSONKeyRecord)
+
+
+------------------------------------------------------------------------------
+parseJSONKey :: FromJSONKey a => Value -> Parser a
+parseJSONKey = case fromJSONKey of
+    FromJSONKeyCoerce _ -> \x -> case x of
+        String t -> pure (unsafeCoerce t)
+        _ -> empty
+    FromJSONKeyText f -> \x -> case x of
+        String t -> pure (f t)
+        _ -> empty
+    FromJSONKeyTextParser f -> \x -> case x of
+        String t -> f t
+        _ -> empty
+    FromJSONKeyValue f -> f
+
+
+------------------------------------------------------------------------------
+parseJSONKeyTuple :: (FromJSONKey (f a), FromJSONKey (Product f as))
+    => Value -> Parser (Product f (Cons a as))
+parseJSONKeyTuple (Array v) | not (V.null v) =
+    Cons <$> parseJSONKey (V.head v) <*> parseJSONKey (Array (V.tail v))
+parseJSONKeyTuple _ = empty
+
+
+------------------------------------------------------------------------------
+parseJSONKeyRecord
+    :: forall s f a as.
+        ( Known s
+        , Key (Val s)
+        , FromJSONKey (f a)
+        , FromJSONKey (Product (Labeled f) as)
+        )
+    => Value -> Parser (Product (Labeled f) (Cons (Pair s a) as))
+parseJSONKeyRecord (Array v) | not (V.null v) =
+    Cons <$> parseJSONKey (V.head v) <*> parseJSONKey (Array (V.tail v))
+parseJSONKeyRecord j@(Object h) = Cons
+    <$> (result >>= parseJSONKey >>= pure . Labeled)
+    <*> parseJSONKey j
+  where
+    result :: Parser Value
+    result = maybe empty pure (H.lookup (key (Proxy :: Proxy s)) h)
+parseJSONKeyRecord _ = empty
+#endif
 
 
 ------------------------------------------------------------------------------
@@ -206,3 +335,131 @@ instance (Known s, Key (Val s), ToJSON (f a), ToJSON (Product (Labeled f) as))
         Object h -> Object $
             H.insert (key (Proxy :: Proxy s)) (toJSON a) h
         x -> x
+#if MIN_VERSION_aeson(1, 0, 0)
+
+
+------------------------------------------------------------------------------
+instance (Known s, Key (Val s), ToJSONKey (f a)) =>
+    ToJSONKey (Labeled f (Pair s a))
+  where
+    toJSONKey = contramapToJSONKeyFunction unlabel toJSONKey
+    toJSONKeyList = contramapToJSONKeyFunction (map unlabel) toJSONKeyList
+
+
+------------------------------------------------------------------------------
+instance (Known s, Key (Val s), ToJSONKey (f a)) =>
+    ToJSONKey (Labeled1 f s a)
+  where
+    toJSONKey = contramapToJSONKeyFunction unlabel1 toJSONKey
+    toJSONKeyList = contramapToJSONKeyFunction (map unlabel1) toJSONKeyList
+
+
+------------------------------------------------------------------------------
+instance __INCOHERENT__ ToJSONKey (Product f Nil) where
+    toJSONKey = ToJSONKeyValue toJSON toEncoding
+    toJSONKeyList = ToJSONKeyValue toJSON toEncoding
+
+
+------------------------------------------------------------------------------
+instance ToJSONKey (Product (Labeled f) Nil) where
+    toJSONKey = ToJSONKeyValue toJSON toEncoding
+    toJSONKeyList = ToJSONKeyValue toJSON toEncoding
+
+
+------------------------------------------------------------------------------
+instance (ToJSONKey (f a), ToJSONKey (Product f as)) =>
+    ToJSONKey (Product f (Cons a as))
+  where
+    toJSONKey = toJSONKeyFunction toJSONKeyTuple
+    toJSONKeyList = toJSONKeyFunction (listValue toJSONKeyTuple)
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPING__ ToJSONKey a => ToJSONKey (Tuple (Cons a Nil)) where
+    toJSONKey = contramapToJSONKeyFunction unsingleton toJSONKey
+    toJSONKeyList = contramapToJSONKeyFunction (map unsingleton) toJSONKeyList
+
+
+------------------------------------------------------------------------------
+instance (ToJSONKey a, ToJSONKey b) => ToJSONKey (Tuple (Cons a (Cons b Nil)))
+  where
+    toJSONKey = toJSONKeyFunction toJSONKeyPair
+    toJSONKeyList = toJSONKeyFunction (listValue toJSONKeyPair)
+
+
+------------------------------------------------------------------------------
+instance __OVERLAPPING__
+    ( Known s
+    , Key (Val s)
+    , ToJSON (f a)
+    , ToJSON (Product (Labeled f) as)
+    , ToJSONKey (f a)
+    , ToJSONKey (Product (Labeled f) as)
+    )
+  =>
+    ToJSONKey (Product (Labeled f) (Cons (Pair s a) as))
+  where
+    toJSONKey = toJSONKeyFunction toJSONKeyRecord
+    toJSONKeyList = toJSONKeyFunction (listValue toJSONKeyRecord)
+
+
+------------------------------------------------------------------------------
+unlabel :: Labeled f (Pair s a) -> f a
+unlabel (Labeled a) = a
+
+
+------------------------------------------------------------------------------
+unlabel1 :: Labeled1 f s a -> f a
+unlabel1 (Labeled1 (Labeled a)) = a
+
+
+------------------------------------------------------------------------------
+unsingleton :: Tuple (Cons a Nil) -> a
+unsingleton (Cons (Identity a) Nil) = a
+
+
+------------------------------------------------------------------------------
+toJSONKey_ :: ToJSONKey a => a -> Value
+toJSONKey_ = case toJSONKey of 
+    ToJSONKeyText a _ -> String . a
+    ToJSONKeyValue a _ -> a
+
+
+------------------------------------------------------------------------------
+toJSONKeyFunction :: (a -> Value) -> ToJSONKeyFunction a
+toJSONKeyFunction f = ToJSONKeyValue f (toEncoding . f)
+
+
+------------------------------------------------------------------------------
+toJSONKeyPair :: (ToJSONKey a, ToJSONKey b)
+    => Tuple (Cons a (Cons b Nil)) -> Value
+toJSONKeyPair  (Cons (Identity a) (Cons (Identity b) Nil)) =
+    Array (V.cons (toJSONKey_ a) (V.cons (toJSONKey_ b) V.empty))
+#if __GLASGOW_HASKELL__ < 800
+toJSONKeyPair _ = undefined
+#endif
+
+
+------------------------------------------------------------------------------
+toJSONKeyTuple :: (ToJSONKey (f a), ToJSONKey (Product f as))
+    => Product f (Cons a as) -> Value
+toJSONKeyTuple (Cons a as) = case toJSONKey_ as of
+    Array v -> Array (V.cons (toJSONKey_ a) v)
+    x -> x
+
+
+------------------------------------------------------------------------------
+toJSONKeyRecord
+    :: forall s f a as.
+        ( Known s
+        , Key (Val s)
+        , ToJSONKey (f a)
+        , ToJSONKey (Product (Labeled f) as)
+        )
+    => Product (Labeled f) (Cons (Pair s a) as) -> Value
+toJSONKeyRecord (Cons (Labeled a) as) = case toJSONKey_ as of
+        Array v -> Array (V.cons (toJSONKey_ a) v)
+        Object h -> Object $
+            H.insert (key (Proxy :: Proxy s)) (toJSONKey_ a) h
+        x -> x
+#endif
