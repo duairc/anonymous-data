@@ -5,11 +5,11 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-#if __GLASGOW_HASKELL__ >= 702
-{-# LANGUAGE Safe #-}
+#ifdef SafeHaskell
+{-# LANGUAGE Trustworthy #-}
 #endif
 
-#if __GLASGOW_HASKELL__ >= 706
+#ifdef DataPolyKinds
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 #endif
@@ -25,11 +25,16 @@ import           Data.Labeled (Labeled (Labeled), Labeled1 (Labeled1))
 
 -- hashable ------------------------------------------------------------------
 import           Data.Hashable (Hashable, hashWithSalt)
+import           Data.Hashable.Lifted (Hashable1, liftHashWithSalt)
 
 
 -- types ---------------------------------------------------------------------
 import           Type.List (Cons, Nil)
 import           Type.Tuple.Pair (Pair)
+
+
+-- types-hashable ------------------------------------------------------------
+import           Type.Meta.Hashable ()
 
 
 ------------------------------------------------------------------------------
@@ -40,6 +45,11 @@ instance Hashable (f a) => Hashable (Labeled f (Pair s a)) where
 ------------------------------------------------------------------------------
 instance Hashable (f a) => Hashable (Labeled1 f s a) where
     hashWithSalt s (Labeled1 a) = hashWithSalt s a
+
+
+------------------------------------------------------------------------------
+instance Hashable1 f => Hashable1 (Labeled1 f s) where
+    liftHashWithSalt hws s (Labeled1 (Labeled a)) = liftHashWithSalt hws s a
 
 
 ------------------------------------------------------------------------------
