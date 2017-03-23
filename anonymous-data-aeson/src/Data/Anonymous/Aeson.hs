@@ -11,16 +11,16 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-#ifdef SafeHaskell
-{-# LANGUAGE Trustworthy #-}
-#endif
+#include "overlap.h"
 
 #ifdef DataPolyKinds
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 #endif
 
-#include "overlap.h"
+#ifdef SafeHaskell
+{-# LANGUAGE Trustworthy #-}
+#endif
 
 module Data.Anonymous.Aeson
     ()
@@ -70,6 +70,10 @@ import           Data.Anonymous.Product (Product (Cons, Nil), Tuple)
 import           Data.Labeled (Labeled (Labeled), Labeled1 (Labeled1))
 
 
+-- anonymous-data-hashable ---------------------------------------------------
+import           Data.Anonymous.Hashable ()
+
+
 -- base ----------------------------------------------------------------------
 import           Control.Applicative
                      (
@@ -98,6 +102,10 @@ import           Type.Meta (Known, Val, val, Proxy (Proxy))
 import           Type.Tuple.Pair (Pair)
 
 
+-- types-aeson ---------------------------------------------------------------
+import           Type.Meta.Aeson ()
+
+
 -- unordered-containers ------------------------------------------------------
 import qualified Data.HashMap.Lazy as H
 
@@ -106,6 +114,18 @@ import qualified Data.HashMap.Lazy as H
 import qualified Data.Vector as V
 
 
+#if !MIN_VERSION_aeson(0, 8, 1)
+------------------------------------------------------------------------------
+instance FromJSON a => FromJSON (Identity a) where
+    parseJSON = fmap Identity . parseJSON
+
+
+------------------------------------------------------------------------------
+instance ToJSON a => ToJSON (Identity a) where
+    toJSON (Identity a) = toJSON a
+
+
+#endif
 #if __GLASGOW_HASKELL__ < 700
 #define Key String ~ 
 key :: (Known s, Val s ~ String) => Proxy s -> Text
