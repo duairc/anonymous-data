@@ -98,7 +98,8 @@ import           Data.Text (Text, pack)
 
 -- types ---------------------------------------------------------------------
 import           Type.List (Cons, Nil)
-import           Type.Meta (Known, Val, val, Proxy (Proxy))
+import           Type.Meta (Known, Val, val)
+import           Type.Meta.Proxy (Proxy (Proxy))
 import           Type.Tuple.Pair (Pair)
 
 
@@ -107,7 +108,7 @@ import           Type.Meta.Aeson ()
 
 
 -- unordered-containers ------------------------------------------------------
-import qualified Data.HashMap.Lazy as H
+import qualified Data.HashMap.Strict as H
 
 
 -- vector --------------------------------------------------------------------

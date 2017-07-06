@@ -40,6 +40,14 @@
 {-# LANGUAGE Trustworthy #-}
 #endif
 
+#if __GLASGOW_HASKELL__ >= 700
+#define __Zero Zero
+#define __n n
+#else
+#define __Zero (Natural Nil)
+#define __n (Natural (Cons n ns))
+#endif
+
 #if MIN_VERSION_base(4, 7, 0)
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
 #endif
@@ -320,7 +328,8 @@ import           Type.List (Cons, Nil)
 #ifdef GenericDeriving
 import           Type.Maybe (Just, Nothing)
 #endif
-import           Type.Meta (Known, Val, val, Proxy (Proxy))
+import           Type.Meta (Known, Val, val)
+import           Type.Meta.Proxy (Proxy (Proxy))
 #if __GLASGOW_HASKELL__ < 700
 import           Type.Natural (Natural)
 #endif
@@ -1704,33 +1713,27 @@ type LookupIndex n as = LookupIndex' n as (T.LookupIndex n as)
 
 #endif
 ------------------------------------------------------------------------------
-#if __GLASGOW_HASKELL__ >= 700
-instance __OVERLAPPING__ a ~ b => LookupIndex' Zero (Cons b as) a where
-#else
-instance a ~ b => LookupIndex' (Natural Nil) (Cons b as) a where
-#endif
+instance __OVERLAPPING__ a ~ b =>
+    LookupIndex'
+        __Zero (Cons b as) a
+  where
     lookupIndex' _ (Cons a _) = a
 
 
 ------------------------------------------------------------------------------
-#if __GLASGOW_HASKELL__ >= 700
 instance __OVERLAPPABLE__
-    ( LookupIndex' (n :- One) as a
+    ( LookupIndex'
+        (__n :- One) as a
 #ifdef ClosedTypeFamilies
     , a ~ T.LookupIndex n (Cons b as)
 #endif
     )
   =>
-    LookupIndex' n (Cons b as) a
+    LookupIndex'
+        __n (Cons b as) a
   where
-    lookupIndex' _ (Cons _ as) = lookupIndex' (Proxy :: Proxy (n :- One)) as
-#else
-instance LookupIndex' (Natural (Cons n ns) :- One) as a =>
-    LookupIndex' (Natural (Cons n ns)) (Cons b as) a
-  where
-    lookupIndex' _ (Cons _ as) =
-        lookupIndex' (Proxy :: Proxy (Natural (Cons n ns) :- One)) as
-#endif
+    lookupIndex' _ (Cons _ as) = lookupIndex'
+        (Proxy :: Proxy (__n :- One)) as
 
 
 ------------------------------------------------------------------------------
@@ -1864,7 +1867,7 @@ class
     as ~ T.UpdateElement n as
   =>
 #endif
-    UpdateElement' 
+    UpdateElement'
         (n :: KPoly1)
         (as :: KList (KPoly1))
   where
@@ -2293,7 +2296,7 @@ class
     ns ~ T.LookupElements ns as
   =>
 #endif
-    LookupElements' 
+    LookupElements'
         (ns :: KList (KPoly1))
         (as :: KList (KPoly1))
   where

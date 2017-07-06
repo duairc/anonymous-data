@@ -217,7 +217,8 @@ import           GHC.TypeLits.Compat (Symbol)
 import           Type.Bool (False, True)
 import           Type.Maybe (Just, Nothing)
 #endif
-import           Type.Meta (Known, Val, val, Proxy (Proxy))
+import           Type.Meta (Known, Val, val)
+import           Type.Meta.Proxy (Proxy (Proxy))
 import           Type.Tuple.Pair (Pair)
 
 
