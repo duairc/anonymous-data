@@ -17,6 +17,7 @@ description:
   'Data.Anonymous.Sum.Sum' can represent n-ary unions and anonymous enums.
 
 extra-source-files:
+  include/*.h
   LICENSE
 
 library
