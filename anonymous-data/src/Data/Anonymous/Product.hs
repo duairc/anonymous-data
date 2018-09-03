@@ -1346,14 +1346,14 @@ instance SGeneric Field Nil where
 
 
 ------------------------------------------------------------------------------
-instance Known s => SGeneric Field (Cons (Pair (s :: Ks) a) Nil) where
+instance Known s => SGeneric Field (Cons (Pair (s :: KString) a) Nil) where
     sto (M1 (K1 a)) = Cons (Labeled (Identity a)) Nil
     sfrom (Cons (Labeled (Identity a)) _) = M1 (K1 a)
 
 
 ------------------------------------------------------------------------------
 instance (Known s, SGeneric Field (Cons a' as)) =>
-    SGeneric Field (Cons (Pair (s :: Ks) a) (Cons a' as))
+    SGeneric Field (Cons (Pair (s :: KString) a) (Cons a' as))
   where
     sto (M1 (K1 a) :*: as) = Cons (Labeled (Identity a)) (sto as)
     sfrom (Cons (Labeled (Identity a)) as) = M1 (K1 a) :*: sfrom as
@@ -1366,14 +1366,14 @@ instance SGeneric Option Nil where
 
 
 ------------------------------------------------------------------------------
-instance Known s => SGeneric Option (Cons (Pair (s :: Ks) a) Nil) where
+instance Known s => SGeneric Option (Cons (Pair (s :: KString) a) Nil) where
     sto (M1 (K1 a)) = Cons (Labeled (First a)) Nil
     sfrom (Cons (Labeled (First a)) _) = M1 (K1 a)
 
 
 ------------------------------------------------------------------------------
 instance (Known s, SGeneric Option (Cons a' as)) =>
-    SGeneric Option (Cons (Pair (s :: Ks) a) (Cons a' as))
+    SGeneric Option (Cons (Pair (s :: KString) a) (Cons a' as))
   where
     sto (M1 (K1 a) :*: as) = Cons (Labeled (First a)) (sto as)
     sfrom (Cons (Labeled (First a)) as) = M1 (K1 a) :*: sfrom as
@@ -1458,13 +1458,14 @@ instance SGeneric (Const b) as => CGeneric (Const b) as where
 
 
 ------------------------------------------------------------------------------
-instance SGeneric Field as => CGeneric Field as where
+instance SGeneric Field as => CGeneric (Field :: KPair (KString, *) -> *) as
+  where
     cto (M1 a) = sto a
     cfrom a = M1 (sfrom a)
 
 
 ------------------------------------------------------------------------------
-instance SGeneric Option as => CGeneric Option as
+instance SGeneric Option as => CGeneric (Option :: KPair (KString, *) -> *) as
   where
     cto (M1 a) = sto a
     cfrom a = M1 (sfrom a)

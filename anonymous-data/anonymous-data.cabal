@@ -1,5 +1,5 @@
 name:           anonymous-data
-version:        0.1
+version:        0.1.0.1
 synopsis:       Product and sum types for anonymous data.
 license:        MPL-2.0
 license-file:   LICENSE
